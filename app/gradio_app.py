@@ -915,4 +915,4 @@ fastapi_app = create_fastapi_app()
 
 
 if __name__ == "__main__":
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=7860, access_log=False)
+    uvicorn.run(fastapi_app, host="127.0.0.1", port=7860, access_log=False)
