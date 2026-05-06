@@ -17,6 +17,20 @@ def empty_rating_state():
     return gr.update(value=None)
 
 
+def switch_experiment_scene(scene):
+    selected_scene = scene or "问答"
+    is_chat = selected_scene == "聊天"
+    is_question = selected_scene == "问答"
+    is_planning = selected_scene == "规划"
+
+    return (
+        gr.update(visible=is_question),
+        gr.update(visible=is_chat),
+        gr.update(visible=is_planning),
+        gr.update(visible=is_question),
+    )
+
+
 def safe_question_index(index: int) -> int:
     if not QUESTION_BANK:
         return 0
@@ -238,6 +252,15 @@ def respond(message, history, llm_history):
         chat_history[-1]["content"] = error_text
         llm_history[-1]["content"] = error_text
         yield "", chat_history, llm_history, empty_score
+
+
+def respond_chat(message, history, llm_history):
+    for next_message, chat_history, next_llm_history, _score_update in respond(
+        message,
+        history,
+        llm_history,
+    ):
+        yield next_message, chat_history, next_llm_history
 
 
 def toggle_reading_panel(is_visible):

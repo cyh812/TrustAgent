@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict
 
 os.environ["NO_PROXY"] = "127.0.0.1,localhost"
 os.environ["no_proxy"] = "127.0.0.1,localhost"
@@ -15,8 +15,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 APP_TITLE = "TrustAgent 实验系统"
-DEFAULT_EXPERIMENT_KEYS = {"ABCD", "trial-002", "trial-003"}
-USED_EXPERIMENT_KEYS: Set[str] = set()
+DEFAULT_EXPERIMENT_KEYS = set()
+EXPERIMENT_KEY_DB = PROJECT_ROOT / "data" / "experiment_keys.db"
 
 RUNTIME_CONFIG: Dict[str, object] = {
     "system_prompt": "你是 TrustAgent，一个谨慎、清晰、可解释的智能助手。",

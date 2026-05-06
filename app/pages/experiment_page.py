@@ -7,7 +7,9 @@ from app.services.experiment_service import (
     initialize_llm_session,
     question_payload,
     respond,
+    respond_chat,
     submit_question_answer,
+    switch_experiment_scene,
     switch_to_next_question,
     switch_to_prev_question,
     toggle_reading_panel,
@@ -22,6 +24,7 @@ def build_experiment_demo():
         reading_panel_visible = gr.State(True)
         question_index_state = gr.State(0)
         llm_history_state = gr.State([])
+        chat_llm_history_state = gr.State([])
         initial_question_title, initial_choices, initial_progress = question_payload(0)
 
         with gr.Column(elem_classes=["top-title"]):
@@ -29,7 +32,7 @@ def build_experiment_demo():
 
         with gr.Row():
             with gr.Column(elem_classes=["scene-switch"]):
-                gr.Radio(
+                scene_selector = gr.Radio(
                     choices=["聊天", "问答", "规划"],
                     value="问答",
                     label="实验场景切换",
@@ -37,7 +40,7 @@ def build_experiment_demo():
                 )
 
         with gr.Row(elem_classes=["main-layout"]):
-            with gr.Column(scale=4, elem_classes=["reading-column"]):
+            with gr.Column(scale=4, elem_classes=["reading-column"]) as reading_column:
                 toggle_reading_btn = gr.Button(
                     "关闭阅读材料",
                     variant="secondary",
@@ -54,53 +57,94 @@ def build_experiment_demo():
                     )
 
             with gr.Column(scale=8, elem_classes=["chat-panel"]):
-                with gr.Column(elem_classes=["question-panel"]):
-                    question_progress = gr.Markdown(initial_progress)
-                    question_md = gr.Markdown(initial_question_title)
-                    question_options = gr.Radio(
-                        choices=initial_choices,
-                        value=None,
-                        interactive=bool(initial_choices),
+                with gr.Column(visible=True) as qa_workspace:
+                    with gr.Column(elem_classes=["question-panel"]):
+                        question_progress = gr.Markdown(initial_progress)
+                        question_md = gr.Markdown(initial_question_title)
+                        question_options = gr.Radio(
+                            choices=initial_choices,
+                            value=None,
+                            interactive=bool(initial_choices),
+                        )
+                        with gr.Row():
+                            prev_question_btn = gr.Button("上一题", variant="secondary")
+                            next_question_btn = gr.Button("下一题", variant="secondary")
+                            confirm_answer_btn = gr.Button("确定", variant="primary")
+                        answer_feedback = gr.Markdown("")
+
+                    chatbot = gr.Chatbot(
+                        label="对话",
+                        elem_id="qa-chatbot",
+                        avatar_images=(None, None),
+                        buttons=["copy"],
+                        height=360,
                     )
-                    with gr.Row():
-                        prev_question_btn = gr.Button("上一题", variant="secondary")
-                        next_question_btn = gr.Button("下一题", variant="secondary")
-                        confirm_answer_btn = gr.Button("确定", variant="primary")
-                    answer_feedback = gr.Markdown("")
 
-                chatbot = gr.Chatbot(
-                    label="对话",
-                    elem_id="chatbot",
-                    avatar_images=(None, None),
-                    buttons=["copy"],
-                    height=360,
-                )
+                    with gr.Column(elem_classes=["rating-panel"]):
+                        with gr.Row():
+                            with gr.Column(scale=7):
+                                trust_score = gr.Radio(
+                                    choices=[str(i) for i in range(1, 8)],
+                                    value=None,
+                                    label=None,
+                                    show_label=False,
+                                    interactive=True,
+                                )
+                            with gr.Column(scale=3, min_width=120):
+                                trust_confirm_btn = gr.Button(
+                                    "信任评分",
+                                    variant="secondary",
+                                    elem_classes=["trust-confirm-btn"],
+                                )
 
-                with gr.Column(elem_classes=["rating-panel"]):
-                    with gr.Row():
-                        with gr.Column(scale=7):
-                            trust_score = gr.Radio(
-                                choices=[str(i) for i in range(1, 8)],
-                                value=None,
-                                label=None,
-                                show_label=False,
-                                interactive=True,
-                            )
-                        with gr.Column(scale=3, min_width=120):
-                            trust_confirm_btn = gr.Button(
-                                "信任评分",
-                                variant="secondary",
-                                elem_classes=["trust-confirm-btn"],
-                            )
+                    with gr.Group(elem_classes=["composer-wrap"]):
+                        message = gr.Textbox(
+                            placeholder="输入问题后按 Enter 发送；Shift + Enter 换行。",
+                            elem_id="composer",
+                            lines=2,
+                            container=True,
+                        )
+                        send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
 
-                with gr.Group(elem_classes=["composer-wrap"]):
-                    message = gr.Textbox(
-                        placeholder="输入问题后按 Enter 发送；Shift + Enter 换行。",
-                        elem_id="composer",
-                        lines=2,
-                        container=True,
+                with gr.Column(visible=False, elem_classes=["free-chat-workspace"]) as chat_workspace:
+                    chat_chatbot = gr.Chatbot(
+                        label="聊天",
+                        elem_id="free-chatbot",
+                        avatar_images=(None, None),
+                        buttons=["copy"],
+                        height=560,
                     )
-                    send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
+
+                    with gr.Group(elem_classes=["composer-wrap"]):
+                        chat_message = gr.Textbox(
+                            placeholder="输入消息后按 Enter 发送；Shift + Enter 换行。",
+                            elem_id="chat-composer",
+                            lines=2,
+                            container=True,
+                        )
+                        chat_send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
+
+                with gr.Column(visible=False, elem_classes=["planning-workspace"]) as planning_workspace:
+                    gr.Markdown(
+                        "### 规划\n\n规划任务页面待扩展。"
+                    )
+
+        scene_selector.change(
+            switch_experiment_scene,
+            inputs=[scene_selector],
+            outputs=[qa_workspace, chat_workspace, planning_workspace, reading_column],
+        )
+
+        chat_message.submit(
+            respond_chat,
+            inputs=[chat_message, chat_chatbot, chat_llm_history_state],
+            outputs=[chat_message, chat_chatbot, chat_llm_history_state],
+        )
+        chat_send_btn.click(
+            respond_chat,
+            inputs=[chat_message, chat_chatbot, chat_llm_history_state],
+            outputs=[chat_message, chat_chatbot, chat_llm_history_state],
+        )
 
         message.submit(
             respond,

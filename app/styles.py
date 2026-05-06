@@ -105,10 +105,20 @@ div[data-testid="footer"] {
     margin-bottom: 12px;
 }
 
-#chatbot {
+#qa-chatbot,
+#free-chatbot {
     min-height: 360px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
+}
+
+#free-chatbot {
+    min-height: 560px;
+}
+
+.free-chat-workspace,
+.planning-workspace {
+    min-height: 640px;
 }
 
 .rating-panel {
