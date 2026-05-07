@@ -1,3 +1,5 @@
+from html import escape
+
 import gradio as gr
 
 from agent.llm_agent import get_llm_settings, stream_chat_reply
@@ -10,7 +12,113 @@ def normalize_history(history):
     for item in history or []:
         if isinstance(item, dict) and "role" in item and "content" in item:
             normalized.append({"role": item["role"], "content": item["content"]})
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            user_content, assistant_content = item
+            if user_content is not None:
+                normalized.append({"role": "user", "content": str(user_content)})
+            if assistant_content is not None:
+                normalized.append({"role": "assistant", "content": str(assistant_content)})
+        elif hasattr(item, "role") and hasattr(item, "content"):
+            normalized.append({"role": item.role, "content": item.content})
     return normalized
+
+
+def custom_chat_records_to_messages(records):
+    messages = []
+    for record in records or []:
+        if not isinstance(record, dict):
+            continue
+
+        user_content = str(record.get("user") or "").strip()
+        if user_content:
+            messages.append({"role": "user", "content": user_content})
+
+        assistant_content = str(record.get("assistant") or "").strip()
+        if assistant_content:
+            messages.append({"role": "assistant", "content": assistant_content})
+            continue
+
+        selected_option = record.get("selected_option")
+        options = record.get("assistant_options") or []
+        if selected_option and isinstance(options, list):
+            for option in options:
+                if not isinstance(option, dict):
+                    continue
+                if str(option.get("id")) == str(selected_option):
+                    selected_content = str(option.get("content") or "").strip()
+                    if selected_content:
+                        messages.append({"role": "assistant", "content": selected_content})
+                    break
+    return messages
+
+
+def format_message_html(content):
+    text = escape(str(content or ""))
+    return text.replace("\n", "<br>")
+
+
+def render_custom_chat(records):
+    if not records:
+        return """
+        <div class="custom-chat-window">
+            <div class="custom-chat-empty">对话尚未开始。</div>
+        </div>
+        """
+
+    items = ['<div class="custom-chat-window">']
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+
+        user_content = format_message_html(record.get("user", ""))
+        assistant_content = format_message_html(record.get("assistant", ""))
+        items.append(
+            f"""
+            <section class="custom-chat-turn">
+                <div class="custom-message custom-message-user">
+                    <div class="custom-message-label">你</div>
+                    <div class="custom-message-body">{user_content}</div>
+                </div>
+            """
+        )
+
+        options = record.get("assistant_options") or []
+        if options:
+            items.append('<div class="custom-answer-options">')
+            for option in options:
+                if not isinstance(option, dict):
+                    continue
+                option_id = escape(str(option.get("id") or ""))
+                option_title = escape(str(option.get("title") or f"回答 {option_id}"))
+                option_content = format_message_html(option.get("content", ""))
+                selected_class = " selected" if str(record.get("selected_option")) == option_id else ""
+                items.append(
+                    f"""
+                    <div class="custom-answer-card{selected_class}">
+                        <div class="custom-answer-title">{option_title}</div>
+                        <div class="custom-answer-body">{option_content}</div>
+                    </div>
+                    """
+                )
+            items.append("</div>")
+        else:
+            items.append(
+                f"""
+                <div class="custom-message custom-message-assistant">
+                    <div class="custom-message-label">TrustAgent</div>
+                    <div class="custom-message-body">{assistant_content}</div>
+                </div>
+                """
+            )
+
+        rating = record.get("rating")
+        if rating is not None:
+            items.append(f'<div class="custom-turn-rating">本轮评分：{escape(str(rating))}</div>')
+
+        items.append("</section>")
+
+    items.append("</div>")
+    return "".join(items)
 
 
 def empty_rating_state():
@@ -261,6 +369,47 @@ def respond_chat(message, history, llm_history):
         llm_history,
     ):
         yield next_message, chat_history, next_llm_history
+
+
+def respond_custom_chat(message, records, llm_history):
+    if not message or not str(message).strip():
+        yield "", render_custom_chat(records), records, llm_history
+        return
+
+    user_message = str(message).strip()
+    chat_records = list(records or [])
+    llm_history = normalize_history(llm_history)
+    context_history = list(llm_history)
+
+    record = {
+        "turn_index": len(chat_records) + 1,
+        "mode": "single",
+        "user": user_message,
+        "assistant": "",
+        "assistant_options": [],
+        "selected_option": None,
+        "rating": None,
+    }
+    chat_records.append(record)
+    llm_history.append({"role": "user", "content": user_message})
+    llm_history.append({"role": "assistant", "content": ""})
+
+    try:
+        for token in stream_chat_reply(
+            user_message=user_message,
+            history=context_history,
+            system_prompt=str(RUNTIME_CONFIG["system_prompt"]),
+            temperature=float(RUNTIME_CONFIG["temperature"]),
+            max_tokens=int(RUNTIME_CONFIG["max_tokens"]),
+        ):
+            record["assistant"] += token
+            llm_history[-1]["content"] += token
+            yield "", render_custom_chat(chat_records), chat_records, llm_history
+    except Exception as exc:
+        error_text = f"LLM 调用失败：{exc}"
+        record["assistant"] = error_text
+        llm_history[-1]["content"] = error_text
+        yield "", render_custom_chat(chat_records), chat_records, llm_history
 
 
 def toggle_reading_panel(is_visible):

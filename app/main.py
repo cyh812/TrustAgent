@@ -12,24 +12,34 @@ if __package__ is None or __package__ == "":
 
 from app.config import APP_TITLE
 from app.pages.admin_page import build_admin_demo
-from app.pages.experiment_page import build_experiment_demo
+from app.pages.chat_page import build_chat_demo
 from app.pages.login_page import build_login_demo
+from app.pages.planning_page import build_planning_demo
+from app.pages.qa_page import build_qa_demo
 
 
 def create_fastapi_app():
     app = FastAPI(title=APP_TITLE)
 
     login_demo = build_login_demo()
-    experiment_demo = build_experiment_demo()
+    chat_demo = build_chat_demo()
+    qa_demo = build_qa_demo()
+    planning_demo = build_planning_demo()
     admin_demo = build_admin_demo()
 
     app = gr.mount_gradio_app(app, login_demo, path="/login")
-    app = gr.mount_gradio_app(app, experiment_demo, path="/experiment")
+    app = gr.mount_gradio_app(app, chat_demo, path="/chat")
+    app = gr.mount_gradio_app(app, qa_demo, path="/qa")
+    app = gr.mount_gradio_app(app, planning_demo, path="/plan")
     app = gr.mount_gradio_app(app, admin_demo, path="/admin")
 
     @app.get("/")
     def root():
         return RedirectResponse(url="/login")
+
+    @app.get("/experiment")
+    def experiment():
+        return RedirectResponse(url="/qa")
 
     return app
 
