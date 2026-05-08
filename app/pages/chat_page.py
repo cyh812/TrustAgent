@@ -1,6 +1,6 @@
 import gradio as gr
 
-from app.services.experiment_service import render_custom_chat, respond_custom_chat
+from app.services.experiment_service import initialize_custom_chat_window, render_custom_chat, respond_custom_chat
 from app.services.key_service import current_time_text
 from app.services.user_data_service import save_chat_record
 from app.styles import EXPERIMENT_CSS
@@ -36,6 +36,7 @@ def build_chat_demo():
                 chat_send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
 
             save_status = gr.Markdown("")
+            redirect_html = gr.HTML("")
 
         chat_message.submit(
             respond_custom_chat,
@@ -50,11 +51,16 @@ def build_chat_demo():
         end_experiment_btn.click(
             save_chat_record,
             inputs=[chat_records_state, chat_llm_history_state, chat_started_at_state],
-            outputs=[save_status, chat_message, chat_send_btn, end_experiment_btn],
+            outputs=[save_status, chat_message, chat_send_btn, end_experiment_btn, redirect_html],
         )
         demo.load(
             current_time_text,
             outputs=[chat_started_at_state],
+        )
+        demo.load(
+            initialize_custom_chat_window,
+            inputs=[chat_records_state],
+            outputs=[chat_window],
         )
 
     return demo

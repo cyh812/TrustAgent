@@ -8,30 +8,24 @@ def build_login_demo():
     with gr.Blocks(title="登录 - TrustAgent") as demo:
         gr.HTML(f"<style>{LOGIN_CSS}</style>")
         gr.Markdown("# 登录")
-        gr.Markdown("请输入实验密钥与被试姓名。密钥一次有效，用后作废。")
+        gr.Markdown("请输入账号ID与密码。密码由后台账号管理生成。")
 
-        gate_key = gr.Textbox(
-            label="实验密钥",
-            placeholder="请输入密钥",
+        account_id = gr.Textbox(
+            label="账号ID",
+            placeholder="请输入账号ID",
+        )
+        password = gr.Textbox(
+            label="密码",
+            placeholder="请输入密码",
             type="password",
         )
-        gate_subject = gr.Textbox(
-            label="被试姓名",
-            placeholder="请输入被试姓名",
-        )
-        gate_task = gr.Radio(
-            choices=["聊天", "问答", "规划"],
-            value="问答",
-            label="实验任务",
-            interactive=True,
-        )
-        gate_submit = gr.Button("验证并进入", variant="primary")
-        gate_status = gr.Markdown("等待验证。")
+        login_submit = gr.Button("登录", variant="primary")
+        login_status = gr.Markdown("等待登录。")
         redirect_html = gr.HTML("")
 
-        gate_submit.click(
+        login_submit.click(
             login_and_enter,
-            inputs=[gate_key, gate_subject, gate_task],
-            outputs=[gate_status, redirect_html, gate_key, gate_subject, gate_task],
+            inputs=[account_id, password],
+            outputs=[login_status, redirect_html, account_id, password],
         )
     return demo

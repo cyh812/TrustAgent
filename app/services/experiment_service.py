@@ -3,7 +3,7 @@ from html import escape
 import gradio as gr
 
 from agent.llm_agent import get_llm_settings, stream_chat_reply
-from app.config import MODEL_OPTIONS, RUNTIME_CONFIG
+from app.config import CHAT_SYSTEM_PROMPT_TEMPLATE, EXPERIMENT_CONTEXT, MODEL_OPTIONS, RUNTIME_CONFIG
 from app.services.data_service import QUESTION_BANK, READING_MATERIAL
 
 
@@ -57,15 +57,43 @@ def format_message_html(content):
     return text.replace("\n", "<br>")
 
 
-def render_custom_chat(records):
-    if not records:
-        return """
-        <div class="custom-chat-window">
-            <div class="custom-chat-empty">对话尚未开始。</div>
-        </div>
-        """
+def current_chat_task_intro():
+    instruction = str(EXPERIMENT_CONTEXT.get("chat_user_instruction") or "").strip()
+    if instruction:
+        return instruction
 
-    items = ['<div class="custom-chat-window">']
+    topic = str(EXPERIMENT_CONTEXT.get("chat_topic") or "").strip()
+    if topic:
+        return f"请围绕“{topic}”与 Agent 自然展开聊天。"
+    return "本次聊天主题尚未配置。"
+
+
+def build_chat_system_prompt():
+    return CHAT_SYSTEM_PROMPT_TEMPLATE.format(
+        emotional_valence_prompt=str(EXPERIMENT_CONTEXT.get("emotional_valence_prompt") or "").strip(),
+        transparency_prompt=str(EXPERIMENT_CONTEXT.get("transparency_prompt") or "").strip(),
+        stance_strategy_prompt=str(EXPERIMENT_CONTEXT.get("stance_strategy_prompt") or "").strip(),
+        certainty_prompt=str(EXPERIMENT_CONTEXT.get("certainty_prompt") or "").strip(),
+    )
+
+
+def render_custom_chat(records):
+    intro = format_message_html(current_chat_task_intro())
+    items = [
+        '<div class="custom-chat-window">',
+        f"""
+        <div class="custom-topic-card">
+            <div class="custom-topic-label">本次聊天主题</div>
+            <div class="custom-topic-body">{intro}</div>
+        </div>
+        """,
+    ]
+
+    if not records:
+        items.append('<div class="custom-chat-empty">对话尚未开始。</div>')
+        items.append("</div>")
+        return "".join(items)
+
     for record in records:
         if not isinstance(record, dict):
             continue
@@ -115,10 +143,26 @@ def render_custom_chat(records):
         if rating is not None:
             items.append(f'<div class="custom-turn-rating">本轮评分：{escape(str(rating))}</div>')
 
+        if int(record.get("turn_index") or 0) == 3 and str(record.get("assistant") or "").strip():
+            items.append(
+                """
+                <div class="custom-trust-card">
+                    <div class="custom-trust-title">请对当前 Agent 的可信度进行评分</div>
+                    <div class="custom-trust-scale">
+                        <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span>
+                    </div>
+                </div>
+                """
+            )
+
         items.append("</section>")
 
     items.append("</div>")
     return "".join(items)
+
+
+def initialize_custom_chat_window(records):
+    return render_custom_chat(records)
 
 
 def empty_rating_state():
@@ -398,7 +442,7 @@ def respond_custom_chat(message, records, llm_history):
         for token in stream_chat_reply(
             user_message=user_message,
             history=context_history,
-            system_prompt=str(RUNTIME_CONFIG["system_prompt"]),
+            system_prompt=build_chat_system_prompt(),
             temperature=float(RUNTIME_CONFIG["temperature"]),
             max_tokens=int(RUNTIME_CONFIG["max_tokens"]),
         ):

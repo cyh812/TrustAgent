@@ -12,6 +12,35 @@ div[data-testid="footer"] {
 }
 """
 
+PROFILE_CSS = """
+.gradio-container {
+    max-width: 920px !important;
+    width: 920px !important;
+    margin: 0 auto !important;
+    padding-left: 18px !important;
+    padding-right: 18px !important;
+}
+
+footer,
+footer.footer,
+div[data-testid="footer"] {
+    display: none !important;
+}
+
+.profile-panel,
+.task-entry-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 16px;
+    margin-top: 12px;
+}
+
+.task-entry-panel {
+    background: #f8fafc;
+}
+"""
+
 EXPERIMENT_CSS = """
 .gradio-container {
     max-width: 1500px !important;
@@ -146,12 +175,35 @@ div[data-testid="footer"] {
 }
 
 .custom-chat-empty {
-    height: 100%;
-    min-height: 500px;
+    min-height: 420px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #94a3b8;
+}
+
+.custom-topic-card {
+    width: min(760px, 92%);
+    margin: 0 auto 18px auto;
+    border: 1px solid #dbe4ef;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px 16px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.custom-topic-label {
+    margin-bottom: 6px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.custom-topic-body {
+    color: #0f172a;
+    font-size: 15px;
+    line-height: 1.55;
 }
 
 .custom-chat-turn {
@@ -232,6 +284,43 @@ div[data-testid="footer"] {
     padding: 6px 12px;
     color: #475569;
     font-size: 13px;
+}
+
+.custom-trust-card {
+    align-self: center;
+    width: min(520px, 88%);
+    border: 1px solid #dbe4ef;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px 14px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.custom-trust-title {
+    margin-bottom: 10px;
+    color: #334155;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.custom-trust-scale {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+}
+
+.custom-trust-scale span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    color: #0f172a;
+    background: #f8fafc;
+    font-size: 14px;
+    font-weight: 600;
 }
 
 .free-chat-workspace,
@@ -377,5 +466,10 @@ div[data-testid="footer"] {
 
 .user-record-detail > div {
     min-height: 360px;
+}
+
+.chat-config-layout {
+    align-items: flex-start !important;
+    margin-bottom: 10px;
 }
 """

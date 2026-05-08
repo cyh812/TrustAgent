@@ -7,11 +7,15 @@ import gradio as gr
 from agent.llm_agent import get_llm_settings
 from app.config import EXPERIMENT_CONTEXT
 from app.config import RUNTIME_CONFIG
-from app.services.experiment_service import custom_chat_records_to_messages, normalize_history
+from app.services.experiment_service import (
+    build_chat_system_prompt,
+    custom_chat_records_to_messages,
+    normalize_history,
+)
 from app.services.key_service import connect_db, current_time_text
 
 
-USER_RECORD_COLUMNS = ["记录ID", "密钥", "任务", "姓名", "开始时间", "结束时间", "消息数"]
+USER_RECORD_COLUMNS = ["记录ID", "账号ID", "密钥", "任务", "姓名", "开始时间", "结束时间", "消息数"]
 
 
 def ensure_record_table(conn: sqlite3.Connection) -> None:
@@ -19,6 +23,7 @@ def ensure_record_table(conn: sqlite3.Connection) -> None:
         """
         CREATE TABLE IF NOT EXISTS experiment_records (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id TEXT NOT NULL DEFAULT '',
             experiment_key TEXT NOT NULL,
             subject_name TEXT NOT NULL,
             task_name TEXT NOT NULL,
@@ -29,6 +34,12 @@ def ensure_record_table(conn: sqlite3.Connection) -> None:
         )
         """
     )
+    columns = {
+        row[1]
+        for row in conn.execute("PRAGMA table_info(experiment_records)").fetchall()
+    }
+    if "account_id" not in columns:
+        conn.execute("ALTER TABLE experiment_records ADD COLUMN account_id TEXT NOT NULL DEFAULT ''")
 
 
 def get_context_value(name: str, default: str = "-") -> str:
@@ -51,21 +62,31 @@ def save_chat_record(chat_history, llm_history, started_at):
     model_history = normalize_history(llm_history)
     started_time = str(started_at or "").strip() or current_time_text()
     ended_time = current_time_text()
+    account_id = get_context_value("account_id")
     experiment_key = get_context_value("experiment_key")
     subject_name = get_context_value("subject_name")
-    task_name = "聊天"
+    task_name = get_context_value("task_name", "聊天")
     llm_settings = get_llm_settings()
 
     payload = {
         "metadata": {
+            "account_id": account_id,
             "experiment_key": experiment_key,
             "subject_name": subject_name,
             "task_name": task_name,
+            "chat_config_id": get_context_value("chat_config_id", ""),
+            "chat_topic": get_context_value("chat_topic", ""),
+            "chat_user_instruction": get_context_value("chat_user_instruction", ""),
+            "emotional_valence_level": get_context_value("emotional_valence_level", ""),
+            "transparency_level": get_context_value("transparency_level", ""),
+            "stance_strategy_level": get_context_value("stance_strategy_level", ""),
+            "certainty_level": get_context_value("certainty_level", ""),
             "started_at": started_time,
             "ended_at": ended_time,
         },
         "runtime_config": {
-            "system_prompt": str(RUNTIME_CONFIG["system_prompt"]),
+            "system_prompt": build_chat_system_prompt() if task_name == "聊天" else str(RUNTIME_CONFIG["system_prompt"]),
+            "base_system_prompt": str(RUNTIME_CONFIG["system_prompt"]),
             "temperature": float(RUNTIME_CONFIG["temperature"]),
             "max_tokens": int(RUNTIME_CONFIG["max_tokens"]),
             "model": str(RUNTIME_CONFIG["model"]),
@@ -82,6 +103,7 @@ def save_chat_record(chat_history, llm_history, started_at):
         conn.execute(
             """
             INSERT INTO experiment_records (
+                account_id,
                 experiment_key,
                 subject_name,
                 task_name,
@@ -90,9 +112,10 @@ def save_chat_record(chat_history, llm_history, started_at):
                 message_count,
                 transcript_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                account_id,
                 experiment_key,
                 subject_name,
                 task_name,
@@ -104,9 +127,11 @@ def save_chat_record(chat_history, llm_history, started_at):
         )
 
     return (
+        f"聊天实验已结束，记录已保存。账号：`{account_id}`；密钥：`{experiment_key}`；消息数：{len(visible_history)}。",
         gr.update(interactive=False),
         gr.update(interactive=False),
         gr.update(interactive=False),
+        gr.update(value="<meta http-equiv='refresh' content='0;url=/profile'>"),
     )
 
 
@@ -115,7 +140,7 @@ def list_user_record_rows() -> List[List[Any]]:
         ensure_record_table(conn)
         rows = conn.execute(
             """
-            SELECT id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
+            SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
             FROM experiment_records
             ORDER BY ended_at DESC, id DESC
             """
@@ -129,8 +154,8 @@ def user_record_summary() -> str:
 
 
 def record_choice_label(row: List[Any]) -> str:
-    record_id, experiment_key, task_name, subject_name, _started_at, ended_at, _message_count = row
-    return f"{record_id} | {experiment_key} | {subject_name} | {task_name} | {ended_at}"
+    record_id, account_id, experiment_key, task_name, subject_name, _started_at, ended_at, _message_count = row
+    return f"{record_id} | {account_id} | {experiment_key} | {subject_name} | {task_name} | {ended_at}"
 
 
 def list_user_record_choices() -> Tuple[str, List[str], List[List[Any]]]:
@@ -157,7 +182,7 @@ def load_user_record(choice):
         ensure_record_table(conn)
         row = conn.execute(
             """
-            SELECT id, experiment_key, task_name, subject_name, started_at, ended_at, message_count, transcript_json
+            SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count, transcript_json
             FROM experiment_records
             WHERE id = ?
             """,
@@ -169,6 +194,7 @@ def load_user_record(choice):
 
     (
         saved_id,
+        account_id,
         experiment_key,
         task_name,
         subject_name,
@@ -184,6 +210,7 @@ def load_user_record(choice):
 
     detail = (
         f"### 记录 #{saved_id}\n"
+        f"- 账号ID：`{account_id}`\n"
         f"- 密钥：`{experiment_key}`\n"
         f"- 姓名：`{subject_name}`\n"
         f"- 任务：`{task_name}`\n"

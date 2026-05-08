@@ -15,6 +15,7 @@ from app.pages.admin_page import build_admin_demo
 from app.pages.chat_page import build_chat_demo
 from app.pages.login_page import build_login_demo
 from app.pages.planning_page import build_planning_demo
+from app.pages.profile_page import build_profile_demo
 from app.pages.qa_page import build_qa_demo
 
 
@@ -25,9 +26,11 @@ def create_fastapi_app():
     chat_demo = build_chat_demo()
     qa_demo = build_qa_demo()
     planning_demo = build_planning_demo()
+    profile_demo = build_profile_demo()
     admin_demo = build_admin_demo()
 
     app = gr.mount_gradio_app(app, login_demo, path="/login")
+    app = gr.mount_gradio_app(app, profile_demo, path="/profile")
     app = gr.mount_gradio_app(app, chat_demo, path="/chat")
     app = gr.mount_gradio_app(app, qa_demo, path="/qa")
     app = gr.mount_gradio_app(app, planning_demo, path="/plan")
@@ -39,7 +42,7 @@ def create_fastapi_app():
 
     @app.get("/experiment")
     def experiment():
-        return RedirectResponse(url="/qa")
+        return RedirectResponse(url="/profile")
 
     return app
 
