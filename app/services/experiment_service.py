@@ -192,8 +192,8 @@ def show_chat_rating_if_complete(records):
         if isinstance(record, dict) and str(record.get("assistant") or "").strip()
     ]
     if len(complete_turns) >= CHAT_MAX_TURNS:
-        return gr.update(visible=True)
-    return gr.update(visible=False, value=None)
+        return gr.update(visible=True), gr.update(visible=True)
+    return gr.update(visible=False, value=None), gr.update(visible=False)
 
 
 def empty_rating_state():
@@ -448,12 +448,14 @@ def respond_chat(message, history, llm_history):
 
 def respond_custom_chat(message, records, llm_history, chat_context=None):
     if not message or not str(message).strip():
-        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(records)
+        rating_update, end_update = show_chat_rating_if_complete(records)
+        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), rating_update, end_update
         return
 
     user_message = str(message).strip()
     chat_records = list(records or [])
     if len(chat_records) >= CHAT_MAX_TURNS:
+        rating_update, end_update = show_chat_rating_if_complete(chat_records)
         yield (
             "",
             render_custom_chat(chat_records, chat_context),
@@ -461,7 +463,8 @@ def respond_custom_chat(message, records, llm_history, chat_context=None):
             normalize_history(llm_history),
             gr.update(interactive=False),
             gr.update(interactive=False),
-            show_chat_rating_if_complete(chat_records),
+            rating_update,
+            end_update,
         )
         return
 
@@ -493,18 +496,20 @@ def respond_custom_chat(message, records, llm_history, chat_context=None):
         ):
             record["assistant"] += token
             llm_history[-1]["content"] += token
-            yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update()
+            yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update(), gr.update()
 
         record["assistant_timestamp"] = current_time_text()
         input_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
         button_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
-        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, show_chat_rating_if_complete(chat_records)
+        rating_update, end_update = show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, rating_update, end_update
     except Exception as exc:
         error_text = f"LLM 调用失败：{exc}"
         record["assistant"] = error_text
         record["assistant_timestamp"] = current_time_text()
         llm_history[-1]["content"] = error_text
-        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(chat_records)
+        rating_update, end_update = show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), rating_update, end_update
 
 
 def toggle_reading_panel(is_visible):

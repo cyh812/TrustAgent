@@ -382,12 +382,36 @@ div[data-testid="footer"] {
 }
 
 .custom-trust-radio {
-    width: min(560px, 90%) !important;
-    margin: 12px auto 0 auto !important;
+    width: 100% !important;
+    margin: 0 !important;
     border: 1px solid #dbe4ef;
     border-radius: 8px;
     background: #ffffff;
     padding: 12px 14px;
+}
+
+.trust-end-row {
+    width: min(760px, 94%) !important;
+    margin: 12px auto 0 auto !important;
+    align-items: stretch !important;
+}
+
+.trust-end-btn {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+}
+
+.trust-end-btn button {
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 56px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1.2 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
 }
 
 .free-chat-workspace,
@@ -419,6 +443,62 @@ div[data-testid="footer"] {
     position: relative !important;
     width: 100% !important;
     margin-top: 10px !important;
+}
+
+.custom-composer {
+    position: relative;
+    width: 100%;
+}
+
+.custom-composer textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 58px;
+    resize: vertical;
+    padding: 13px 68px 13px 16px;
+    border: 1px solid #cbd5e1;
+    border-radius: 16px;
+    color: #0f172a;
+    background: #ffffff;
+    font-size: 15px;
+    line-height: 1.5;
+    outline: none;
+}
+
+.custom-composer textarea:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+}
+
+.custom-composer button {
+    position: absolute;
+    right: 14px;
+    bottom: 12px;
+    width: 42px;
+    min-width: 42px;
+    height: 42px;
+    border: 0;
+    border-radius: 9999px;
+    color: #ffffff;
+    background: #2563eb;
+    cursor: pointer;
+    font-size: 18px;
+    line-height: 1;
+}
+
+.custom-composer button:hover {
+    background: #1d4ed8;
+}
+
+.hidden-composer-bridge {
+    position: fixed !important;
+    left: -10000px !important;
+    top: auto !important;
+    width: 1px !important;
+    height: 1px !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    overflow: hidden !important;
 }
 
 #composer {

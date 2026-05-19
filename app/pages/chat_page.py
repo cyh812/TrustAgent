@@ -11,55 +11,9 @@ from app.services.user_data_service import save_chat_record
 from app.styles import EXPERIMENT_CSS
 
 
-CHAT_ENTER_TO_SEND_JS = """
-<script>
-(() => {
-    const insertTextAtCursor = (textarea, text) => {
-        const start = textarea.selectionStart ?? textarea.value.length;
-        const end = textarea.selectionEnd ?? textarea.value.length;
-        textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
-        textarea.selectionStart = textarea.selectionEnd = start + text.length;
-        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-    };
-
-    const bindEnterToSend = () => {
-        const textarea = document.querySelector("#composer textarea");
-        const sendButton = document.querySelector("#composer-send button, #composer-send");
-        if (!textarea || !sendButton || textarea.dataset.enterToSendBound === "1") {
-            return;
-        }
-        textarea.dataset.enterToSendBound = "1";
-        textarea.addEventListener("keydown", (event) => {
-            if (event.key !== "Enter" || event.isComposing) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-            event.stopImmediatePropagation();
-
-            if (event.shiftKey) {
-                insertTextAtCursor(textarea, "\\n");
-                return;
-            }
-
-            sendButton.click();
-        }, true);
-    };
-
-    bindEnterToSend();
-    new MutationObserver(bindEnterToSend).observe(document.body, {
-        childList: true,
-        subtree: true,
-    });
-})();
-</script>
-"""
-
-
 def build_chat_demo():
     with gr.Blocks(title="聊天 - TrustAgent") as demo:
-        gr.HTML(f"<style>{EXPERIMENT_CSS}</style>{CHAT_ENTER_TO_SEND_JS}")
+        gr.HTML(f"<style>{EXPERIMENT_CSS}</style>")
 
         chat_records_state = gr.State([])
         chat_llm_history_state = gr.State([])
@@ -67,10 +21,8 @@ def build_chat_demo():
         chat_context_state = gr.State({})
 
         with gr.Row(elem_classes=["task-header"]):
-            with gr.Column(scale=8, elem_classes=["top-title"]):
+            with gr.Column(elem_classes=["top-title"]):
                 gr.Markdown("# 可信智能体实验 - 聊天")
-            with gr.Column(scale=2, min_width=160, elem_classes=["task-end-action"]):
-                end_experiment_btn = gr.Button("结束实验", variant="stop")
 
         with gr.Column(elem_classes=["chat-panel", "free-chat-workspace"]):
             chat_window = gr.HTML(
@@ -80,21 +32,34 @@ def build_chat_demo():
 
             with gr.Group(elem_classes=["composer-wrap"]):
                 chat_message = gr.Textbox(
-                    placeholder="输入消息后按 Enter 发送；Shift + Enter 换行。",
+                    placeholder="输入消息后点击发送按钮。",
                     elem_id="composer",
                     lines=2,
                     container=True,
                 )
-                chat_send_btn = gr.Button("\u27a4", variant="primary", elem_id="composer-send", elem_classes=["send-inside-btn"])
+                chat_send_btn = gr.Button(
+                    "\u27a4",
+                    variant="primary",
+                    elem_classes=["send-inside-btn"],
+                )
 
-            trust_score = gr.Radio(
-                choices=[str(i) for i in range(1, 8)],
-                value=None,
-                label="请你对当前LLM Agent所产生的信任感水平进行打分",
-                visible=False,
-                interactive=True,
-                elem_classes=["custom-trust-radio"],
-            )
+            with gr.Row(elem_classes=["trust-end-row"]):
+                trust_score = gr.Radio(
+                    choices=[str(i) for i in range(1, 8)],
+                    value=None,
+                    label="请你对当前LLM Agent所产生的信任感水平进行打分",
+                    visible=False,
+                    interactive=True,
+                    elem_classes=["custom-trust-radio"],
+                    scale=8,
+                )
+                end_experiment_btn = gr.Button(
+                    "结束实验",
+                    variant="stop",
+                    visible=False,
+                    scale=2,
+                    elem_classes=["trust-end-btn"],
+                )
             save_status = gr.Markdown("")
             redirect_html = gr.HTML("")
 
@@ -109,6 +74,7 @@ def build_chat_demo():
                 chat_message,
                 chat_send_btn,
                 trust_score,
+                end_experiment_btn,
             ],
             concurrency_limit=8,
         )
@@ -123,6 +89,7 @@ def build_chat_demo():
                 chat_message,
                 chat_send_btn,
                 trust_score,
+                end_experiment_btn,
             ],
             concurrency_limit=8,
         )
