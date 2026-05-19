@@ -38,8 +38,9 @@ def ensure_record_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE experiment_records ADD COLUMN account_id TEXT NOT NULL DEFAULT ''")
 
 
-def get_context_value(name: str, default: str = "-") -> str:
-    value = str(EXPERIMENT_CONTEXT.get(name, default) or default).strip()
+def get_context_value(name: str, default: str = "-", context=None) -> str:
+    context = context or EXPERIMENT_CONTEXT
+    value = str(context.get(name, default) or default).strip()
     return value or default
 
 
@@ -57,14 +58,15 @@ def normalize_custom_records(chat_records):
     return list(chat_records or [])
 
 
-def save_chat_record(chat_records, started_at, trust_score):
+def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
+    chat_context = chat_context or EXPERIMENT_CONTEXT
     custom_records = normalize_custom_records(chat_records)
     started_time = str(started_at or "").strip() or current_time_text()
     ended_time = current_time_text()
-    account_id = get_context_value("account_id")
-    experiment_key = get_context_value("experiment_key")
-    subject_name = get_context_value("subject_name")
-    task_name = get_context_value("task_name", "聊天")
+    account_id = get_context_value("account_id", context=chat_context)
+    experiment_key = get_context_value("experiment_key", context=chat_context)
+    subject_name = get_context_value("subject_name", context=chat_context)
+    task_name = get_context_value("task_name", "聊天", context=chat_context)
     llm_settings = get_llm_settings()
 
     payload = {
@@ -73,20 +75,20 @@ def save_chat_record(chat_records, started_at, trust_score):
             "experiment_key": experiment_key,
             "subject_name": subject_name,
             "task_name": task_name,
-            "chat_config_id": get_context_value("chat_config_id", ""),
-            "chat_topic": get_context_value("chat_topic", ""),
-            "chat_user_instruction": get_context_value("chat_user_instruction", ""),
-            "emotional_valence_level": get_context_value("emotional_valence_level", ""),
-            "transparency_level": get_context_value("transparency_level", ""),
-            "stance_strategy_level": get_context_value("stance_strategy_level", ""),
-            "certainty_level": get_context_value("certainty_level", ""),
-            "initiative_level": get_context_value("initiative_level", ""),
+            "chat_config_id": get_context_value("chat_config_id", "", context=chat_context),
+            "chat_topic": get_context_value("chat_topic", "", context=chat_context),
+            "chat_user_instruction": get_context_value("chat_user_instruction", "", context=chat_context),
+            "emotional_valence_level": get_context_value("emotional_valence_level", "", context=chat_context),
+            "transparency_level": get_context_value("transparency_level", "", context=chat_context),
+            "stance_strategy_level": get_context_value("stance_strategy_level", "", context=chat_context),
+            "certainty_level": get_context_value("certainty_level", "", context=chat_context),
+            "initiative_level": get_context_value("initiative_level", "", context=chat_context),
             "trust_score": str(trust_score or "").strip(),
             "started_at": started_time,
             "ended_at": ended_time,
         },
         "runtime_config": {
-            "system_prompt": build_chat_system_prompt() if task_name == "聊天" else str(RUNTIME_CONFIG["system_prompt"]),
+            "system_prompt": build_chat_system_prompt(chat_context) if task_name == "聊天" else str(RUNTIME_CONFIG["system_prompt"]),
             "temperature": float(RUNTIME_CONFIG["temperature"]),
             "max_tokens": int(RUNTIME_CONFIG["max_tokens"]),
             "model": llm_settings.model,

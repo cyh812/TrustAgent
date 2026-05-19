@@ -166,8 +166,8 @@ div[data-testid="footer"] {
 }
 
 .custom-chat-window {
-    height: 560px;
-    overflow-y: auto;
+    min-height: 560px;
+    overflow: visible;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #f8fafc;
@@ -242,6 +242,64 @@ div[data-testid="footer"] {
 .custom-message-body {
     color: #0f172a;
     font-size: 15px;
+}
+
+.custom-message-body p,
+.custom-answer-body p,
+.custom-topic-body p {
+    margin: 0 0 8px 0;
+}
+
+.custom-message-body p:last-child,
+.custom-answer-body p:last-child,
+.custom-topic-body p:last-child {
+    margin-bottom: 0;
+}
+
+.custom-message-body ul,
+.custom-message-body ol,
+.custom-answer-body ul,
+.custom-answer-body ol {
+    margin: 8px 0 8px 20px;
+    padding-left: 16px;
+}
+
+.custom-message-body li,
+.custom-answer-body li {
+    margin: 4px 0;
+}
+
+.custom-message-body pre,
+.custom-answer-body pre {
+    max-width: 100%;
+    overflow-x: auto;
+    border-radius: 8px;
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 10px 12px;
+}
+
+.custom-message-body code,
+.custom-answer-body code {
+    border-radius: 4px;
+    background: #e2e8f0;
+    padding: 1px 4px;
+    font-size: 0.92em;
+}
+
+.custom-message-body pre code,
+.custom-answer-body pre code {
+    background: transparent;
+    padding: 0;
+    color: inherit;
+}
+
+.custom-message-body blockquote,
+.custom-answer-body blockquote {
+    margin: 8px 0;
+    padding-left: 12px;
+    border-left: 3px solid #cbd5e1;
+    color: #475569;
 }
 
 .custom-answer-options {

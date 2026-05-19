@@ -25,7 +25,7 @@ def build_profile_demo():
         gr.HTML(f"<style>{PROFILE_CSS}</style>")
 
         with gr.Row():
-            gr.Markdown("# ????")
+            gr.Markdown("# 个人信息")
             back_to_login_btn = gr.Button("\u8fd4\u56de\u767b\u5f55\u9875", variant="secondary", scale=0)
 
         profile_status = gr.Markdown("")

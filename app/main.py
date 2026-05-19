@@ -1,4 +1,4 @@
-import gradio as gr
+﻿import gradio as gr
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from pathlib import Path
@@ -51,4 +51,4 @@ fastapi_app = create_fastapi_app()
 
 
 if __name__ == "__main__":
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=7860, access_log=False)
+    uvicorn.run(fastapi_app, host="127.0.0.1", port=6006, access_log=False)

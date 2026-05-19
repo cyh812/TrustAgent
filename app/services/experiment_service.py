@@ -10,6 +10,10 @@ from app.services.key_service import current_time_text
 CHAT_MAX_TURNS = 6
 
 
+def snapshot_experiment_context():
+    return dict(EXPERIMENT_CONTEXT)
+
+
 def normalize_history(history):
     normalized = []
     for item in history or []:
@@ -56,33 +60,52 @@ def custom_chat_records_to_messages(records):
 
 
 def format_message_html(content):
-    text = escape(str(content or ""))
-    return text.replace("\n", "<br>")
+    text = str(content or "")
+    escaped_text = escape(text)
+    try:
+        import markdown
+
+        return markdown.markdown(
+            escaped_text,
+            extensions=["extra", "sane_lists", "nl2br"],
+            output_format="html5",
+        )
+    except Exception:
+        pass
+
+    try:
+        from markdown_it import MarkdownIt
+
+        return MarkdownIt("commonmark", {"breaks": True, "html": False}).render(escaped_text)
+    except Exception:
+        return escaped_text.replace("\n", "<br>")
 
 
-def current_chat_task_intro():
-    instruction = str(EXPERIMENT_CONTEXT.get("chat_user_instruction") or "").strip()
+def current_chat_task_intro(context=None):
+    context = context or EXPERIMENT_CONTEXT
+    instruction = str(context.get("chat_user_instruction") or "").strip()
     if instruction:
         return instruction
 
-    topic = str(EXPERIMENT_CONTEXT.get("chat_topic") or "").strip()
+    topic = str(context.get("chat_topic") or "").strip()
     if topic:
         return f"请围绕“{topic}”与 Agent 自然展开聊天。"
     return "本次聊天主题尚未配置。"
 
 
-def build_chat_system_prompt():
+def build_chat_system_prompt(context=None):
+    context = context or EXPERIMENT_CONTEXT
     return CHAT_SYSTEM_PROMPT_TEMPLATE.format(
-        emotional_valence_prompt=str(EXPERIMENT_CONTEXT.get("emotional_valence_prompt") or "").strip(),
-        transparency_prompt=str(EXPERIMENT_CONTEXT.get("transparency_prompt") or "").strip(),
-        stance_strategy_prompt=str(EXPERIMENT_CONTEXT.get("stance_strategy_prompt") or "").strip(),
-        certainty_prompt=str(EXPERIMENT_CONTEXT.get("certainty_prompt") or "").strip(),
-        initiative_prompt=str(EXPERIMENT_CONTEXT.get("initiative_prompt") or "").strip(),
+        emotional_valence_prompt=str(context.get("emotional_valence_prompt") or "").strip(),
+        transparency_prompt=str(context.get("transparency_prompt") or "").strip(),
+        stance_strategy_prompt=str(context.get("stance_strategy_prompt") or "").strip(),
+        certainty_prompt=str(context.get("certainty_prompt") or "").strip(),
+        initiative_prompt=str(context.get("initiative_prompt") or "").strip(),
     )
 
 
-def render_custom_chat(records):
-    intro = format_message_html(current_chat_task_intro())
+def render_custom_chat(records, context=None):
+    intro = format_message_html(current_chat_task_intro(context))
     items = [
         '<div class="custom-chat-window">',
         f"""
@@ -153,8 +176,13 @@ def render_custom_chat(records):
     return "".join(items)
 
 
-def initialize_custom_chat_window(records):
-    return render_custom_chat(records)
+def initialize_custom_chat_window(records, context=None):
+    return render_custom_chat(records, context)
+
+
+def initialize_custom_chat_session(records):
+    context = snapshot_experiment_context()
+    return context, render_custom_chat(records, context)
 
 
 def show_chat_rating_if_complete(records):
@@ -418,9 +446,9 @@ def respond_chat(message, history, llm_history):
         yield next_message, chat_history, next_llm_history
 
 
-def respond_custom_chat(message, records, llm_history):
+def respond_custom_chat(message, records, llm_history, chat_context=None):
     if not message or not str(message).strip():
-        yield "", render_custom_chat(records), records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(records)
+        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(records)
         return
 
     user_message = str(message).strip()
@@ -428,7 +456,7 @@ def respond_custom_chat(message, records, llm_history):
     if len(chat_records) >= CHAT_MAX_TURNS:
         yield (
             "",
-            render_custom_chat(chat_records),
+            render_custom_chat(chat_records, chat_context),
             chat_records,
             normalize_history(llm_history),
             gr.update(interactive=False),
@@ -459,24 +487,24 @@ def respond_custom_chat(message, records, llm_history):
         for token in stream_chat_reply(
             user_message=user_message,
             history=context_history,
-            system_prompt=build_chat_system_prompt(),
+            system_prompt=build_chat_system_prompt(chat_context),
             temperature=float(RUNTIME_CONFIG["temperature"]),
             max_tokens=int(RUNTIME_CONFIG["max_tokens"]),
         ):
             record["assistant"] += token
             llm_history[-1]["content"] += token
-            yield "", render_custom_chat(chat_records), chat_records, llm_history, gr.update(), gr.update(), gr.update()
+            yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update()
 
         record["assistant_timestamp"] = current_time_text()
         input_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
         button_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
-        yield "", render_custom_chat(chat_records), chat_records, llm_history, input_update, button_update, show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, show_chat_rating_if_complete(chat_records)
     except Exception as exc:
         error_text = f"LLM 调用失败：{exc}"
         record["assistant"] = error_text
         record["assistant_timestamp"] = current_time_text()
         llm_history[-1]["content"] = error_text
-        yield "", render_custom_chat(chat_records), chat_records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(chat_records)
 
 
 def toggle_reading_panel(is_visible):

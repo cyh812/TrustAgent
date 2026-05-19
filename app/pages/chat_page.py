@@ -1,18 +1,70 @@
 import gradio as gr
 
-from app.services.experiment_service import initialize_custom_chat_window, render_custom_chat, respond_custom_chat
+from app.services.experiment_service import (
+    initialize_custom_chat_window,
+    initialize_custom_chat_session,
+    render_custom_chat,
+    respond_custom_chat,
+)
 from app.services.key_service import current_time_text
 from app.services.user_data_service import save_chat_record
 from app.styles import EXPERIMENT_CSS
 
 
+CHAT_ENTER_TO_SEND_JS = """
+<script>
+(() => {
+    const insertTextAtCursor = (textarea, text) => {
+        const start = textarea.selectionStart ?? textarea.value.length;
+        const end = textarea.selectionEnd ?? textarea.value.length;
+        textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+        textarea.selectionStart = textarea.selectionEnd = start + text.length;
+        textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+
+    const bindEnterToSend = () => {
+        const textarea = document.querySelector("#composer textarea");
+        const sendButton = document.querySelector("#composer-send button, #composer-send");
+        if (!textarea || !sendButton || textarea.dataset.enterToSendBound === "1") {
+            return;
+        }
+        textarea.dataset.enterToSendBound = "1";
+        textarea.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" || event.isComposing) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation();
+
+            if (event.shiftKey) {
+                insertTextAtCursor(textarea, "\\n");
+                return;
+            }
+
+            sendButton.click();
+        }, true);
+    };
+
+    bindEnterToSend();
+    new MutationObserver(bindEnterToSend).observe(document.body, {
+        childList: true,
+        subtree: true,
+    });
+})();
+</script>
+"""
+
+
 def build_chat_demo():
     with gr.Blocks(title="聊天 - TrustAgent") as demo:
-        gr.HTML(f"<style>{EXPERIMENT_CSS}</style>")
+        gr.HTML(f"<style>{EXPERIMENT_CSS}</style>{CHAT_ENTER_TO_SEND_JS}")
 
         chat_records_state = gr.State([])
         chat_llm_history_state = gr.State([])
         chat_started_at_state = gr.State("")
+        chat_context_state = gr.State({})
 
         with gr.Row(elem_classes=["task-header"]):
             with gr.Column(scale=8, elem_classes=["top-title"]):
@@ -33,7 +85,7 @@ def build_chat_demo():
                     lines=2,
                     container=True,
                 )
-                chat_send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
+                chat_send_btn = gr.Button("\u27a4", variant="primary", elem_id="composer-send", elem_classes=["send-inside-btn"])
 
             trust_score = gr.Radio(
                 choices=[str(i) for i in range(1, 8)],
@@ -48,7 +100,7 @@ def build_chat_demo():
 
         chat_message.submit(
             respond_custom_chat,
-            inputs=[chat_message, chat_records_state, chat_llm_history_state],
+            inputs=[chat_message, chat_records_state, chat_llm_history_state, chat_context_state],
             outputs=[
                 chat_message,
                 chat_window,
@@ -58,10 +110,11 @@ def build_chat_demo():
                 chat_send_btn,
                 trust_score,
             ],
+            concurrency_limit=8,
         )
         chat_send_btn.click(
             respond_custom_chat,
-            inputs=[chat_message, chat_records_state, chat_llm_history_state],
+            inputs=[chat_message, chat_records_state, chat_llm_history_state, chat_context_state],
             outputs=[
                 chat_message,
                 chat_window,
@@ -71,10 +124,11 @@ def build_chat_demo():
                 chat_send_btn,
                 trust_score,
             ],
+            concurrency_limit=8,
         )
         end_experiment_btn.click(
             save_chat_record,
-            inputs=[chat_records_state, chat_started_at_state, trust_score],
+            inputs=[chat_records_state, chat_started_at_state, trust_score, chat_context_state],
             outputs=[save_status, chat_message, chat_send_btn, end_experiment_btn, redirect_html],
         )
         demo.load(
@@ -82,9 +136,9 @@ def build_chat_demo():
             outputs=[chat_started_at_state],
         )
         demo.load(
-            initialize_custom_chat_window,
+            initialize_custom_chat_session,
             inputs=[chat_records_state],
-            outputs=[chat_window],
+            outputs=[chat_context_state, chat_window],
         )
 
     return demo
