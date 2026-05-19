@@ -35,22 +35,46 @@ def build_chat_demo():
                 )
                 chat_send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
 
+            trust_score = gr.Radio(
+                choices=[str(i) for i in range(1, 8)],
+                value=None,
+                label="请你对当前LLM Agent所产生的信任感水平进行打分",
+                visible=False,
+                interactive=True,
+                elem_classes=["custom-trust-radio"],
+            )
             save_status = gr.Markdown("")
             redirect_html = gr.HTML("")
 
         chat_message.submit(
             respond_custom_chat,
             inputs=[chat_message, chat_records_state, chat_llm_history_state],
-            outputs=[chat_message, chat_window, chat_records_state, chat_llm_history_state],
+            outputs=[
+                chat_message,
+                chat_window,
+                chat_records_state,
+                chat_llm_history_state,
+                chat_message,
+                chat_send_btn,
+                trust_score,
+            ],
         )
         chat_send_btn.click(
             respond_custom_chat,
             inputs=[chat_message, chat_records_state, chat_llm_history_state],
-            outputs=[chat_message, chat_window, chat_records_state, chat_llm_history_state],
+            outputs=[
+                chat_message,
+                chat_window,
+                chat_records_state,
+                chat_llm_history_state,
+                chat_message,
+                chat_send_btn,
+                trust_score,
+            ],
         )
         end_experiment_btn.click(
             save_chat_record,
-            inputs=[chat_records_state, chat_llm_history_state, chat_started_at_state],
+            inputs=[chat_records_state, chat_started_at_state, trust_score],
             outputs=[save_status, chat_message, chat_send_btn, end_experiment_btn, redirect_html],
         )
         demo.load(

@@ -16,11 +16,17 @@ def start_plan_task():
     return start_task("plan")
 
 
+def return_to_login():
+    return gr.update(value="<meta http-equiv='refresh' content='0;url=/login'>")
+
+
 def build_profile_demo():
     with gr.Blocks(title="个人信息 - TrustAgent") as demo:
         gr.HTML(f"<style>{PROFILE_CSS}</style>")
 
-        gr.Markdown("# 个人信息")
+        with gr.Row():
+            gr.Markdown("# ????")
+            back_to_login_btn = gr.Button("\u8fd4\u56de\u767b\u5f55\u9875", variant="secondary", scale=0)
 
         profile_status = gr.Markdown("")
         redirect_html = gr.HTML("")
@@ -38,6 +44,11 @@ def build_profile_demo():
                 chat_btn = gr.Button("进入聊天任务", variant="secondary")
                 qa_btn = gr.Button("进入问答任务", variant="secondary")
                 plan_btn = gr.Button("进入规划任务", variant="secondary")
+
+        back_to_login_btn.click(
+            return_to_login,
+            outputs=[redirect_html],
+        )
 
         save_profile_btn.click(
             save_profile_info,

@@ -5,6 +5,9 @@ import gradio as gr
 from agent.llm_agent import get_llm_settings, stream_chat_reply
 from app.config import CHAT_SYSTEM_PROMPT_TEMPLATE, EXPERIMENT_CONTEXT, MODEL_OPTIONS, RUNTIME_CONFIG
 from app.services.data_service import QUESTION_BANK, READING_MATERIAL
+from app.services.key_service import current_time_text
+
+CHAT_MAX_TURNS = 6
 
 
 def normalize_history(history):
@@ -74,6 +77,7 @@ def build_chat_system_prompt():
         transparency_prompt=str(EXPERIMENT_CONTEXT.get("transparency_prompt") or "").strip(),
         stance_strategy_prompt=str(EXPERIMENT_CONTEXT.get("stance_strategy_prompt") or "").strip(),
         certainty_prompt=str(EXPERIMENT_CONTEXT.get("certainty_prompt") or "").strip(),
+        initiative_prompt=str(EXPERIMENT_CONTEXT.get("initiative_prompt") or "").strip(),
     )
 
 
@@ -143,18 +147,6 @@ def render_custom_chat(records):
         if rating is not None:
             items.append(f'<div class="custom-turn-rating">本轮评分：{escape(str(rating))}</div>')
 
-        if int(record.get("turn_index") or 0) == 3 and str(record.get("assistant") or "").strip():
-            items.append(
-                """
-                <div class="custom-trust-card">
-                    <div class="custom-trust-title">请对当前 Agent 的可信度进行评分</div>
-                    <div class="custom-trust-scale">
-                        <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span>
-                    </div>
-                </div>
-                """
-            )
-
         items.append("</section>")
 
     items.append("</div>")
@@ -163,6 +155,17 @@ def render_custom_chat(records):
 
 def initialize_custom_chat_window(records):
     return render_custom_chat(records)
+
+
+def show_chat_rating_if_complete(records):
+    complete_turns = [
+        record
+        for record in records or []
+        if isinstance(record, dict) and str(record.get("assistant") or "").strip()
+    ]
+    if len(complete_turns) >= CHAT_MAX_TURNS:
+        return gr.update(visible=True)
+    return gr.update(visible=False, value=None)
 
 
 def empty_rating_state():
@@ -417,11 +420,23 @@ def respond_chat(message, history, llm_history):
 
 def respond_custom_chat(message, records, llm_history):
     if not message or not str(message).strip():
-        yield "", render_custom_chat(records), records, llm_history
+        yield "", render_custom_chat(records), records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(records)
         return
 
     user_message = str(message).strip()
     chat_records = list(records or [])
+    if len(chat_records) >= CHAT_MAX_TURNS:
+        yield (
+            "",
+            render_custom_chat(chat_records),
+            chat_records,
+            normalize_history(llm_history),
+            gr.update(interactive=False),
+            gr.update(interactive=False),
+            show_chat_rating_if_complete(chat_records),
+        )
+        return
+
     llm_history = normalize_history(llm_history)
     context_history = list(llm_history)
 
@@ -429,7 +444,9 @@ def respond_custom_chat(message, records, llm_history):
         "turn_index": len(chat_records) + 1,
         "mode": "single",
         "user": user_message,
+        "user_timestamp": current_time_text(),
         "assistant": "",
+        "assistant_timestamp": "",
         "assistant_options": [],
         "selected_option": None,
         "rating": None,
@@ -448,12 +465,18 @@ def respond_custom_chat(message, records, llm_history):
         ):
             record["assistant"] += token
             llm_history[-1]["content"] += token
-            yield "", render_custom_chat(chat_records), chat_records, llm_history
+            yield "", render_custom_chat(chat_records), chat_records, llm_history, gr.update(), gr.update(), gr.update()
+
+        record["assistant_timestamp"] = current_time_text()
+        input_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
+        button_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
+        yield "", render_custom_chat(chat_records), chat_records, llm_history, input_update, button_update, show_chat_rating_if_complete(chat_records)
     except Exception as exc:
         error_text = f"LLM 调用失败：{exc}"
         record["assistant"] = error_text
+        record["assistant_timestamp"] = current_time_text()
         llm_history[-1]["content"] = error_text
-        yield "", render_custom_chat(chat_records), chat_records, llm_history
+        yield "", render_custom_chat(chat_records), chat_records, llm_history, gr.update(), gr.update(), show_chat_rating_if_complete(chat_records)
 
 
 def toggle_reading_panel(is_visible):

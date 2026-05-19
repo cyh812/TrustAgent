@@ -323,6 +323,15 @@ div[data-testid="footer"] {
     font-weight: 600;
 }
 
+.custom-trust-radio {
+    width: min(560px, 90%) !important;
+    margin: 12px auto 0 auto !important;
+    border: 1px solid #dbe4ef;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 12px 14px;
+}
+
 .free-chat-workspace,
 .planning-workspace {
     min-height: 640px;

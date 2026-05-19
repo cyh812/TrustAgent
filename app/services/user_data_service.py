@@ -7,11 +7,7 @@ import gradio as gr
 from agent.llm_agent import get_llm_settings
 from app.config import EXPERIMENT_CONTEXT
 from app.config import RUNTIME_CONFIG
-from app.services.experiment_service import (
-    build_chat_system_prompt,
-    custom_chat_records_to_messages,
-    normalize_history,
-)
+from app.services.experiment_service import build_chat_system_prompt
 from app.services.key_service import connect_db, current_time_text
 
 
@@ -47,19 +43,22 @@ def get_context_value(name: str, default: str = "-") -> str:
     return value or default
 
 
-def count_messages(*histories: List[Dict[str, Any]]) -> int:
-    return sum(len(history or []) for history in histories)
+def count_chat_messages(records: List[Dict[str, Any]]) -> int:
+    return sum(
+        2
+        for record in records or []
+        if isinstance(record, dict)
+        and str(record.get("user") or "").strip()
+        and str(record.get("assistant") or "").strip()
+    )
 
 
-def normalize_saved_chat(chat_history):
-    if chat_history and all(isinstance(item, dict) and "user" in item for item in chat_history):
-        return custom_chat_records_to_messages(chat_history), list(chat_history)
-    return normalize_history(chat_history), []
+def normalize_custom_records(chat_records):
+    return list(chat_records or [])
 
 
-def save_chat_record(chat_history, llm_history, started_at):
-    visible_history, custom_records = normalize_saved_chat(chat_history)
-    model_history = normalize_history(llm_history)
+def save_chat_record(chat_records, started_at, trust_score):
+    custom_records = normalize_custom_records(chat_records)
     started_time = str(started_at or "").strip() or current_time_text()
     ended_time = current_time_text()
     account_id = get_context_value("account_id")
@@ -81,21 +80,20 @@ def save_chat_record(chat_history, llm_history, started_at):
             "transparency_level": get_context_value("transparency_level", ""),
             "stance_strategy_level": get_context_value("stance_strategy_level", ""),
             "certainty_level": get_context_value("certainty_level", ""),
+            "initiative_level": get_context_value("initiative_level", ""),
+            "trust_score": str(trust_score or "").strip(),
             "started_at": started_time,
             "ended_at": ended_time,
         },
         "runtime_config": {
             "system_prompt": build_chat_system_prompt() if task_name == "聊天" else str(RUNTIME_CONFIG["system_prompt"]),
-            "base_system_prompt": str(RUNTIME_CONFIG["system_prompt"]),
             "temperature": float(RUNTIME_CONFIG["temperature"]),
             "max_tokens": int(RUNTIME_CONFIG["max_tokens"]),
-            "model": str(RUNTIME_CONFIG["model"]),
+            "model": llm_settings.model,
             "provider": llm_settings.provider,
             "base_url": llm_settings.base_url,
         },
-        "chat_history": visible_history,
         "custom_chat_records": custom_records,
-        "llm_history": model_history,
     }
 
     with connect_db() as conn:
@@ -121,13 +119,13 @@ def save_chat_record(chat_history, llm_history, started_at):
                 task_name,
                 started_time,
                 ended_time,
-                count_messages(visible_history),
+                count_chat_messages(custom_records),
                 json.dumps(payload, ensure_ascii=False, indent=2),
             ),
         )
 
     return (
-        f"聊天实验已结束，记录已保存。账号：`{account_id}`；密钥：`{experiment_key}`；消息数：{len(visible_history)}。",
+        f"聊天实验已结束，记录已保存。账号：`{account_id}`；密钥：`{experiment_key}`；信任评分：`{trust_score or '未评分'}`。",
         gr.update(interactive=False),
         gr.update(interactive=False),
         gr.update(interactive=False),

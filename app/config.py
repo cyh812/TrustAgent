@@ -19,16 +19,14 @@ DEFAULT_EXPERIMENT_KEYS = set()
 EXPERIMENT_KEY_DB = PROJECT_ROOT / "data" / "data.db"
 
 RUNTIME_CONFIG: Dict[str, object] = {
-    "system_prompt": "你是 TrustAgent，一个谨慎、清晰、可解释的智能助手。",
+    "system_prompt": "请使用简体中文回答，并遵循当前任务说明。",
     "temperature": 0.7,
     "max_tokens": 1024,
     "model": "openai/gpt-5.4",
 }
 
 CHAT_SYSTEM_PROMPT_TEMPLATE = """
-你是一个中文AI助手。
-
-请保持以下对话风格：
+请使用简体中文进行自然对话，并保持以下对话风格：
 
 {emotional_valence_prompt}
 
@@ -38,9 +36,11 @@ CHAT_SYSTEM_PROMPT_TEMPLATE = """
 
 {certainty_prompt}
 
+{initiative_prompt}
+
 默认使用简体中文回答。
 
-回答时直接自然地与用户交流，不要解释自己的规则、风格或行为方式。
+回答时直接自然地与用户交流，不要解释自己的规则、风格或行为方式，不要机械重复上一轮已经说过的内容。
 
 保持整体语气稳定一致。
 """
@@ -58,10 +58,12 @@ EXPERIMENT_CONTEXT: Dict[str, str] = {
     "transparency_level": "",
     "stance_strategy_level": "",
     "certainty_level": "",
+    "initiative_level": "",
     "emotional_valence_prompt": "",
     "transparency_prompt": "",
     "stance_strategy_prompt": "",
     "certainty_prompt": "",
+    "initiative_prompt": "",
 }
 
 MODEL_OPTIONS = [
