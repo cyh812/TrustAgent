@@ -1,6 +1,7 @@
 import sqlite3
 from itertools import permutations
 from typing import Any, Dict, List, Tuple
+from urllib.parse import quote
 
 import gradio as gr
 
@@ -133,6 +134,16 @@ CHAT_CONFIG_TABLE_COLUMNS = [
 TASK_ROUTES = {"chat": "/chat", "qa": "/qa", "plan": "/plan"}
 TASK_NAMES = {"chat": "聊天", "qa": "问答", "plan": "规划"}
 TASK_QUOTA_COLUMNS = {"chat": "chat_quota", "qa": "qa_quota", "plan": "plan_quota"}
+
+
+def request_account_id(request) -> str:
+    query_params = getattr(request, "query_params", {}) or {}
+    return normalize_account_id(query_params.get("account_id") or "")
+
+
+def request_chat_config_id(request) -> str:
+    query_params = getattr(request, "query_params", {}) or {}
+    return str(query_params.get("chat_config_id") or "").strip()
 
 
 def ensure_account_table(conn: sqlite3.Connection) -> None:
@@ -665,6 +676,46 @@ def claim_next_chat_task_config(account_id: str) -> Dict[str, Any]:
     }
 
 
+def get_chat_task_config(account_id: str, config_id) -> Dict[str, Any]:
+    clean_account_id = normalize_account_id(account_id)
+    try:
+        clean_config_id = int(config_id)
+    except (TypeError, ValueError):
+        return {}
+    if not clean_account_id:
+        return {}
+
+    with connect_db() as conn:
+        ensure_chat_config_table(conn)
+        row = conn.execute(
+            """
+            SELECT id, topic, user_instruction, expression_style_level, transparency_level,
+                   stance_strategy_level, certainty_level, initiative_level
+            FROM chat_task_configs
+            WHERE id = ? AND account_id = ?
+            """,
+            (clean_config_id, clean_account_id),
+        ).fetchone()
+    if row is None:
+        return {}
+
+    return {
+        "id": int(row[0]),
+        "topic": row[1],
+        "user_instruction": row[2] or "",
+        "emotional_valence_level": row[3],
+        "transparency_level": row[4],
+        "stance_strategy_level": row[5],
+        "certainty_level": row[6],
+        "initiative_level": row[7],
+        "emotional_valence_prompt": EMOTIONAL_VALENCE_PROMPTS.get(row[3], ""),
+        "transparency_prompt": TRANSPARENCY_PROMPTS.get(row[4], ""),
+        "stance_strategy_prompt": STANCE_STRATEGY_PROMPTS.get(row[5], ""),
+        "certainty_prompt": CERTAINTY_PROMPTS.get(row[6], ""),
+        "initiative_prompt": INITIATIVE_PROMPTS.get(row[7], ""),
+    }
+
+
 def authenticate_account(account_id, password):
     clean_account_id = normalize_account_id(account_id)
     clean_password = normalize_secret(password)
@@ -722,6 +773,27 @@ def profile_values():
     )
 
 
+def profile_values_for_request(request: gr.Request):
+    account = get_account(request_account_id(request))
+    if not account:
+        return (
+            "未登录或账号不存在，请返回登录页。",
+            "",
+            "",
+            "",
+            "",
+            "聊天：0 次；问答：0 次；规划：0 次。",
+        )
+    return (
+        "",
+        account["account_id"],
+        account["password_key"],
+        account["name"],
+        account["phone"],
+        format_quota_text(account),
+    )
+
+
 def save_profile_info(account_id, password_key, name, phone):
     clean_account_id = normalize_account_id(account_id)
     clean_password = normalize_secret(password_key)
@@ -748,7 +820,6 @@ def save_profile_info(account_id, password_key, name, phone):
         return "账号不存在，无法保存。", gr.update(), gr.update()
 
     account = get_account(clean_account_id)
-    set_current_account(account)
     return "个人信息已保存。", gr.update(value=clean_password), gr.update(value=format_quota_text(account))
 
 
@@ -813,3 +884,94 @@ def start_task(task_key):
         f"正在进入{task_name}任务，剩余次数：{int(refreshed.get(quota_column) or 0)}。",
         gr.update(value=f"<meta http-equiv='refresh' content='0;url={TASK_ROUTES[task_key]}'>"),
     )
+
+
+def start_task_for_account(task_key, account_id):
+    clean_account_id = normalize_account_id(account_id)
+    quoted_account_id = quote(clean_account_id)
+    account = get_account(clean_account_id)
+    if not account:
+        return "未登录或账号不存在，请返回登录页。", gr.update(value="")
+
+    quota_column = TASK_QUOTA_COLUMNS.get(task_key)
+    if not quota_column:
+        return "未知任务类型。", gr.update(value="")
+
+    current_quota = int(account.get(quota_column) or 0)
+    task_name = TASK_NAMES[task_key]
+    if current_quota <= 0:
+        return f"{task_name}任务剩余次数为 0，无法进入实验。", gr.update(value="")
+
+    if task_key == "chat":
+        chat_config = claim_next_chat_task_config(clean_account_id)
+        if not chat_config:
+            return "聊天任务没有可用配置，无法进入实验。", gr.update(value="")
+
+        refreshed = get_account(clean_account_id)
+        return (
+            f"正在进入{task_name}任务，主题：{chat_config['topic']}；剩余次数：{int(refreshed.get(quota_column) or 0)}。",
+            gr.update(
+                value=(
+                    "<meta http-equiv='refresh' "
+                    f"content='0;url=/chat?account_id={quoted_account_id}&chat_config_id={chat_config['id']}'>"
+                )
+            ),
+        )
+
+    with connect_db() as conn:
+        ensure_account_table(conn)
+        updated = conn.execute(
+            f"""
+            UPDATE experiment_accounts
+            SET {quota_column} = {quota_column} - 1, updated_at = ?
+            WHERE account_id = ? AND {quota_column} > 0
+            """,
+            (current_time_text(), clean_account_id),
+        ).rowcount
+
+    if not updated:
+        return f"{task_name}任务剩余次数为 0，无法进入实验。", gr.update(value="")
+
+    refreshed = get_account(clean_account_id)
+    return (
+        f"正在进入{task_name}任务，剩余次数：{int(refreshed.get(quota_column) or 0)}。",
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url={TASK_ROUTES[task_key]}?account_id={quoted_account_id}'>"),
+    )
+
+
+def build_chat_context_for_request(request) -> Dict[str, str]:
+    account_id = request_account_id(request)
+    account = get_account(account_id)
+    if not account:
+        return {}
+
+    chat_config = get_chat_task_config(account_id, request_chat_config_id(request))
+    if not chat_config:
+        return {
+            "account_id": account_id,
+            "experiment_key": str(account.get("password_key") or "-"),
+            "subject_name": str(account.get("name") or ""),
+            "phone": str(account.get("phone") or ""),
+            "task_name": TASK_NAMES["chat"],
+        }
+
+    return {
+        "account_id": account_id,
+        "experiment_key": str(account.get("password_key") or "-"),
+        "subject_name": str(account.get("name") or ""),
+        "phone": str(account.get("phone") or ""),
+        "task_name": TASK_NAMES["chat"],
+        "chat_config_id": str(chat_config["id"]),
+        "chat_topic": str(chat_config["topic"]),
+        "chat_user_instruction": str(chat_config["user_instruction"]),
+        "emotional_valence_level": str(chat_config["emotional_valence_level"]),
+        "transparency_level": str(chat_config["transparency_level"]),
+        "stance_strategy_level": str(chat_config["stance_strategy_level"]),
+        "certainty_level": str(chat_config["certainty_level"]),
+        "initiative_level": str(chat_config["initiative_level"]),
+        "emotional_valence_prompt": str(chat_config["emotional_valence_prompt"]),
+        "transparency_prompt": str(chat_config["transparency_prompt"]),
+        "stance_strategy_prompt": str(chat_config["stance_strategy_prompt"]),
+        "certainty_prompt": str(chat_config["certainty_prompt"]),
+        "initiative_prompt": str(chat_config["initiative_prompt"]),
+    }

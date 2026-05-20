@@ -1,5 +1,9 @@
 import json
+import re
 import sqlite3
+import tempfile
+import zipfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import gradio as gr
@@ -131,38 +135,132 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
         gr.update(interactive=False),
         gr.update(interactive=False),
         gr.update(interactive=False),
-        gr.update(value="<meta http-equiv='refresh' content='0;url=/profile'>"),
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
     )
 
 
-def list_user_record_rows() -> List[List[Any]]:
+
+def list_user_record_rows(account_id=None) -> List[List[Any]]:
+    clean_account_id = str(account_id or "").strip()
     with connect_db() as conn:
         ensure_record_table(conn)
-        rows = conn.execute(
-            """
-            SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
-            FROM experiment_records
-            ORDER BY ended_at DESC, id DESC
-            """
-        ).fetchall()
+        if clean_account_id:
+            rows = conn.execute(
+                """
+                SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
+                FROM experiment_records
+                WHERE account_id = ?
+                ORDER BY ended_at DESC, id DESC
+                """,
+                (clean_account_id,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
+                FROM experiment_records
+                ORDER BY ended_at DESC, id DESC
+                """
+            ).fetchall()
     return [list(row) for row in rows]
 
 
 def user_record_summary() -> str:
     rows = list_user_record_rows()
-    return f"共 {len(rows)} 条用户实验记录。"
+    return f"Total records: {len(rows)}."
 
 
-def record_choice_label(row: List[Any]) -> str:
-    record_id, account_id, experiment_key, task_name, subject_name, _started_at, ended_at, _message_count = row
-    return f"{record_id} | {account_id} | {experiment_key} | {subject_name} | {task_name} | {ended_at}"
+def list_user_account_rows() -> List[List[Any]]:
+    with connect_db() as conn:
+        ensure_record_table(conn)
+        rows = conn.execute(
+            """
+            SELECT account_id,
+                   COALESCE(NULLIF(MAX(subject_name), ''), '-') AS subject_name,
+                   COUNT(*) AS record_count,
+                   MAX(ended_at) AS last_ended_at
+            FROM experiment_records
+            GROUP BY account_id
+            ORDER BY MAX(ended_at) DESC, account_id ASC
+            """
+        ).fetchall()
+    return [list(row) for row in rows]
+
+
+def user_account_choice_label(row: List[Any]) -> str:
+    account_id, subject_name, record_count, last_ended_at = row
+    return f"{account_id} | {subject_name or '-'} | {record_count} records | {last_ended_at or '-'}"
 
 
 def list_user_record_choices() -> Tuple[str, List[str], List[List[Any]]]:
-    rows = list_user_record_rows()
-    return user_record_summary(), [record_choice_label(row) for row in rows], rows
+    account_rows = list_user_account_rows()
+    total_records = len(list_user_record_rows())
+    summary = f"{len(account_rows)} users have records; {total_records} records in total. Select a user to view records."
+    return summary, [user_account_choice_label(row) for row in account_rows], []
 
 
+def parse_account_choice(choice) -> str:
+    if not choice:
+        return ""
+    return str(choice).split("|", 1)[0].strip()
+
+
+def select_user_record_account(choice):
+    account_id = parse_account_choice(choice)
+    if not account_id:
+        return "Select a user.", [], "No user selected. Export is unavailable.", gr.update(value=None)
+
+    rows = list_user_record_rows(account_id)
+    return (
+        f"Account `{account_id}` has {len(rows)} chat records.",
+        rows,
+        "You can export all chat records for the selected user.",
+        gr.update(value=None),
+    )
+
+
+def safe_export_name(value: str) -> str:
+    safe = re.sub(r"[^0-9A-Za-z_.-]+", "_", str(value or "").strip())
+    return safe or "unknown"
+
+
+def export_user_records_zip(choice):
+    account_id = parse_account_choice(choice)
+    if not account_id:
+        return "Select a user before exporting.", gr.update(value=None)
+
+    with connect_db() as conn:
+        ensure_record_table(conn)
+        rows = conn.execute(
+            """
+            SELECT id, transcript_json
+            FROM experiment_records
+            WHERE account_id = ?
+            ORDER BY ended_at ASC, id ASC
+            """,
+            (account_id,),
+        ).fetchall()
+
+    if not rows:
+        return f"Account `{account_id}` has no records to export.", gr.update(value=None)
+
+    export_dir = Path(tempfile.gettempdir()) / "trustagent_exports"
+    export_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = export_dir / f"trustagent_{safe_export_name(account_id)}_{safe_export_name(current_time_text())}.zip"
+
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
+        for record_id, transcript_json in rows:
+            try:
+                payload = json.loads(transcript_json)
+                content = json.dumps(payload, ensure_ascii=False, indent=2)
+            except json.JSONDecodeError:
+                content = transcript_json
+            zip_file.writestr(f"record_{record_id}.json", content)
+
+    return f"Exported {len(rows)} records for account `{account_id}`.", str(zip_path)
+
+
+# Legacy helpers kept for compatibility with older imports/callbacks.
 def parse_record_id(choice) -> Optional[int]:
     if not choice:
         return None
@@ -174,51 +272,9 @@ def parse_record_id(choice) -> Optional[int]:
 
 
 def load_user_record(choice):
-    record_id = parse_record_id(choice)
-    if record_id is None:
-        return "请选择一条用户记录。", {}
-
-    with connect_db() as conn:
-        ensure_record_table(conn)
-        row = conn.execute(
-            """
-            SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count, transcript_json
-            FROM experiment_records
-            WHERE id = ?
-            """,
-            (record_id,),
-        ).fetchone()
-
-    if row is None:
-        return "未找到该用户记录。", {}
-
-    (
-        saved_id,
-        account_id,
-        experiment_key,
-        task_name,
-        subject_name,
-        started_at,
-        ended_at,
-        message_count,
-        transcript_json,
-    ) = row
-    try:
-        transcript = json.loads(transcript_json)
-    except json.JSONDecodeError:
-        transcript = {"raw": transcript_json}
-
-    detail = (
-        f"### 记录 #{saved_id}\n"
-        f"- 账号ID：`{account_id}`\n"
-        f"- 密钥：`{experiment_key}`\n"
-        f"- 姓名：`{subject_name}`\n"
-        f"- 任务：`{task_name}`\n"
-        f"- 开始时间：`{started_at}`\n"
-        f"- 结束时间：`{ended_at}`\n"
-        f"- 消息数：`{message_count}`"
-    )
-    return detail, transcript
+    account_id = parse_account_choice(choice)
+    rows = list_user_record_rows(account_id) if account_id else []
+    return f"Account `{account_id}` has {len(rows)} chat records.", rows
 
 
 def refresh_user_record_view():
@@ -227,6 +283,6 @@ def refresh_user_record_view():
         summary,
         gr.update(choices=choices, value=None),
         rows,
-        "请选择一条用户记录。",
-        {},
+        "Select a user before exporting.",
+        gr.update(value=None),
     )

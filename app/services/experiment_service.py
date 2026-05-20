@@ -14,6 +14,12 @@ def snapshot_experiment_context():
     return dict(EXPERIMENT_CONTEXT)
 
 
+def snapshot_chat_context_from_request(request):
+    from app.services.account_service import build_chat_context_for_request
+
+    return build_chat_context_for_request(request)
+
+
 def normalize_history(history):
     normalized = []
     for item in history or []:
@@ -180,8 +186,8 @@ def initialize_custom_chat_window(records, context=None):
     return render_custom_chat(records, context)
 
 
-def initialize_custom_chat_session(records):
-    context = snapshot_experiment_context()
+def initialize_custom_chat_session(records, request: gr.Request):
+    context = snapshot_chat_context_from_request(request)
     return context, render_custom_chat(records, context)
 
 

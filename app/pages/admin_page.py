@@ -18,9 +18,10 @@ from app.services.account_service import (
 )
 from app.services.user_data_service import (
     USER_RECORD_COLUMNS,
+    export_user_records_zip,
     list_user_record_choices,
-    load_user_record,
     refresh_user_record_view,
+    select_user_record_account,
 )
 from app.styles import ADMIN_CSS
 
@@ -87,9 +88,14 @@ def build_admin_demo():
                             user_record_select = gr.Dropdown(
                                 choices=user_record_choices,
                                 value=None,
-                                label="按账号选择用户记录",
+                                label="按账号ID选择用户",
                                 interactive=True,
-                                scale=8,
+                                scale=7,
+                            )
+                            export_user_record_btn = gr.Button(
+                                "导出该用户记录",
+                                variant="primary",
+                                scale=2,
                             )
                             refresh_user_record_btn = gr.Button(
                                 "刷新记录",
@@ -106,14 +112,11 @@ def build_admin_demo():
                                 label="用户记录列表",
                             )
 
-                        with gr.Row(elem_classes=["user-record-detail"]):
-                            with gr.Column(scale=4):
-                                user_record_detail = gr.Markdown("请选择一条用户记录。")
-                            with gr.Column(scale=8):
-                                user_record_json = gr.JSON(
-                                    value={},
-                                    label="完整上下文",
-                                )
+                        export_user_record_status = gr.Markdown("请选择用户后导出。")
+                        export_user_record_file = gr.File(
+                            label="导出压缩包",
+                            interactive=False,
+                        )
 
                 with gr.Tab("聊天任务配置"):
                     with gr.Column(elem_classes=["admin-section"]):
@@ -286,15 +289,26 @@ def build_admin_demo():
                 user_record_summary_box,
                 user_record_select,
                 user_record_table,
-                user_record_detail,
-                user_record_json,
+                export_user_record_status,
+                export_user_record_file,
             ],
         )
 
         user_record_select.change(
-            load_user_record,
+            select_user_record_account,
             inputs=[user_record_select],
-            outputs=[user_record_detail, user_record_json],
+            outputs=[
+                user_record_summary_box,
+                user_record_table,
+                export_user_record_status,
+                export_user_record_file,
+            ],
+        )
+
+        export_user_record_btn.click(
+            export_user_records_zip,
+            inputs=[user_record_select],
+            outputs=[export_user_record_status, export_user_record_file],
         )
 
         refresh_user_record_btn.click(
@@ -303,8 +317,8 @@ def build_admin_demo():
                 user_record_summary_box,
                 user_record_select,
                 user_record_table,
-                user_record_detail,
-                user_record_json,
+                export_user_record_status,
+                export_user_record_file,
             ],
         )
 

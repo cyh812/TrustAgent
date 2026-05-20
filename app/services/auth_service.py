@@ -1,6 +1,7 @@
 import gradio as gr
+from urllib.parse import quote
 
-from app.services.account_service import authenticate_account, set_current_account
+from app.services.account_service import authenticate_account
 
 
 def login_and_enter(account_id, password):
@@ -13,10 +14,9 @@ def login_and_enter(account_id, password):
             gr.update(value=""),
         )
 
-    set_current_account(account)
     return (
         status_text,
-        gr.update(value="<meta http-equiv='refresh' content='0;url=/profile'>"),
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={quote(str(account['account_id']))}'>"),
         gr.update(value=account_id),
         gr.update(value=""),
     )

@@ -1,19 +1,19 @@
 import gradio as gr
 
-from app.services.account_service import profile_values, save_profile_info, start_task
+from app.services.account_service import profile_values_for_request, save_profile_info, start_task_for_account
 from app.styles import PROFILE_CSS
 
 
-def start_chat_task():
-    return start_task("chat")
+def start_chat_task(account_id):
+    return start_task_for_account("chat", account_id)
 
 
-def start_qa_task():
-    return start_task("qa")
+def start_qa_task(account_id):
+    return start_task_for_account("qa", account_id)
 
 
-def start_plan_task():
-    return start_task("plan")
+def start_plan_task(account_id):
+    return start_task_for_account("plan", account_id)
 
 
 def return_to_login():
@@ -58,19 +58,22 @@ def build_profile_demo():
 
         chat_btn.click(
             start_chat_task,
+            inputs=[account_id],
             outputs=[profile_status, redirect_html],
         )
         qa_btn.click(
             start_qa_task,
+            inputs=[account_id],
             outputs=[profile_status, redirect_html],
         )
         plan_btn.click(
             start_plan_task,
+            inputs=[account_id],
             outputs=[profile_status, redirect_html],
         )
 
         demo.load(
-            profile_values,
+            profile_values_for_request,
             outputs=[profile_status, account_id, password_key, name, phone, quota_text],
         )
 
