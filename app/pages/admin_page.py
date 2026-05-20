@@ -38,30 +38,6 @@ ADMIN_PAGE_EXTRA_CSS = """
 """
 
 
-def refresh_admin_page_view():
-    account_summary, account_rows = refresh_account_admin_view()
-    chat_summary, chat_account_choices, chat_rows, _account_rows = refresh_chat_config_admin_view()
-    (
-        user_record_summary,
-        user_record_select,
-        user_record_rows,
-        user_record_detail,
-        user_record_json,
-    ) = refresh_user_record_view()
-    return (
-        account_summary,
-        account_rows,
-        chat_summary,
-        chat_account_choices,
-        chat_rows,
-        user_record_summary,
-        user_record_select,
-        user_record_rows,
-        user_record_detail,
-        user_record_json,
-    )
-
-
 def build_admin_demo():
     with gr.Blocks(title="管理 - TrustAgent") as demo:
         gr.HTML(f"<style>{ADMIN_CSS}{ADMIN_PAGE_EXTRA_CSS}</style>")
@@ -373,22 +349,6 @@ def build_admin_demo():
         ).then(
             refresh_account_admin_view,
             outputs=[account_summary_box, account_table],
-        )
-
-        demo.load(
-            refresh_admin_page_view,
-            outputs=[
-                account_summary_box,
-                account_table,
-                chat_config_summary_box,
-                chat_account_select,
-                chat_config_table,
-                user_record_summary_box,
-                user_record_select,
-                user_record_table,
-                user_record_detail,
-                user_record_json,
-            ],
         )
 
     return demo
