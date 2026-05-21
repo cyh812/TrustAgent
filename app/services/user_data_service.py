@@ -1,8 +1,8 @@
 import json
 import re
 import sqlite3
-import tempfile
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -10,6 +10,7 @@ import gradio as gr
 
 from agent.llm_agent import get_llm_settings
 from app.config import EXPERIMENT_CONTEXT
+from app.config import PROJECT_ROOT
 from app.config import RUNTIME_CONFIG
 from app.services.experiment_service import build_chat_system_prompt
 from app.services.key_service import connect_db, current_time_text
@@ -244,9 +245,10 @@ def export_user_records_zip(choice):
     if not rows:
         return f"Account `{account_id}` has no records to export.", gr.update(value=None)
 
-    export_dir = Path(tempfile.gettempdir()) / "trustagent_exports"
+    export_dir = PROJECT_ROOT / "data" / "exports"
     export_dir.mkdir(parents=True, exist_ok=True)
-    zip_path = export_dir / f"trustagent_{safe_export_name(account_id)}_{safe_export_name(current_time_text())}.zip"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    zip_path = export_dir / f"trustagent_{safe_export_name(account_id)}_{timestamp}.zip"
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
         for record_id, transcript_json in rows:
@@ -257,7 +259,10 @@ def export_user_records_zip(choice):
                 content = transcript_json
             zip_file.writestr(f"record_{record_id}.json", content)
 
-    return f"Exported {len(rows)} records for account `{account_id}`.", str(zip_path)
+    if not zip_path.exists():
+        return "Export failed: zip file was not created.", gr.update(value=None)
+
+    return f"Exported {len(rows)} records for account `{account_id}`.", str(zip_path.resolve())
 
 
 # Legacy helpers kept for compatibility with older imports/callbacks.
