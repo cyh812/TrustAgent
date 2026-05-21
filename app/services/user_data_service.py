@@ -262,7 +262,12 @@ def export_user_records_zip(choice):
     if not zip_path.exists():
         return "Export failed: zip file was not created.", gr.update(value=None)
 
-    return f"Exported {len(rows)} records for account `{account_id}`.", str(zip_path.resolve())
+    download_url = f"/exports/{zip_path.name}"
+    return (
+        f"Exported {len(rows)} records for account `{account_id}`. "
+        f"[Download zip]({download_url})",
+        str(zip_path.resolve()),
+    )
 
 
 # Legacy helpers kept for compatibility with older imports/callbacks.

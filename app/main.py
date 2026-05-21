@@ -1,5 +1,7 @@
 ﻿import gradio as gr
 from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi.responses import FileResponse
 from fastapi.responses import RedirectResponse
 from pathlib import Path
 import sys
@@ -11,6 +13,7 @@ if __package__ is None or __package__ == "":
         sys.path.insert(0, str(project_root))
 
 from app.config import APP_TITLE
+from app.config import PROJECT_ROOT
 from app.pages.admin_page import build_admin_demo
 from app.pages.chat_page import build_chat_demo
 from app.pages.login_page import build_login_demo
@@ -21,6 +24,7 @@ from app.pages.qa_page import build_qa_demo
 
 def create_fastapi_app():
     app = FastAPI(title=APP_TITLE)
+    export_dir = PROJECT_ROOT / "data" / "exports"
 
     login_demo = build_login_demo()
     chat_demo = build_chat_demo()
@@ -34,7 +38,12 @@ def create_fastapi_app():
     app = gr.mount_gradio_app(app, chat_demo, path="/chat")
     app = gr.mount_gradio_app(app, qa_demo, path="/qa")
     app = gr.mount_gradio_app(app, planning_demo, path="/plan")
-    app = gr.mount_gradio_app(app, admin_demo, path="/admin")
+    app = gr.mount_gradio_app(
+        app,
+        admin_demo,
+        path="/admin",
+        allowed_paths=[str(export_dir.resolve())],
+    )
 
     @app.get("/")
     def root():
@@ -43,6 +52,22 @@ def create_fastapi_app():
     @app.get("/experiment")
     def experiment():
         return RedirectResponse(url="/profile")
+
+    @app.get("/exports/{filename}")
+    def download_export(filename: str):
+        if "/" in filename or "\\" in filename or not filename.endswith(".zip"):
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        export_root = export_dir.resolve()
+        file_path = (export_dir / filename).resolve()
+        if export_root not in file_path.parents or not file_path.exists():
+            raise HTTPException(status_code=404, detail="Not Found")
+
+        return FileResponse(
+            path=file_path,
+            filename=filename,
+            media_type="application/zip",
+        )
 
     return app
 
