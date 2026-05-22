@@ -162,12 +162,16 @@ div[data-testid="footer"] {
 }
 
 #custom-chat-window {
+    height: 560px;
     min-height: 560px;
+    overflow: hidden;
 }
 
 .custom-chat-window {
+    height: 560px;
     min-height: 560px;
-    overflow: visible;
+    overflow-y: auto;
+    overflow-x: hidden;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #f8fafc;
@@ -230,6 +234,217 @@ div[data-testid="footer"] {
 
 .custom-message-assistant {
     align-self: flex-start;
+}
+
+.planning-process-stack {
+    align-self: flex-start;
+    width: min(82%, 900px);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.planning-process-card {
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+    padding: 9px 11px;
+    color: #475569;
+}
+
+.planning-process-label {
+    margin-bottom: 4px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.planning-process-body {
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.planning-rating-card {
+    margin-bottom: 0 !important;
+}
+
+.planning-native-rating-row {
+    width: min(760px, 94%) !important;
+    margin: 8px auto 6px auto !important;
+    align-items: center !important;
+    gap: 10px !important;
+    border: 1px solid #dbe4ef;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 8px 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.planning-native-rating-radio {
+    flex: 1 1 auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+.planning-native-rating-radio > div,
+.planning-native-rating-radio .wrap,
+.planning-native-rating-radio .wrap-inner {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.planning-native-rating-radio .label-wrap,
+.planning-native-rating-radio legend {
+    display: none !important;
+}
+
+.planning-native-rating-radio fieldset {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    justify-content: space-between !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+.planning-native-rating-radio label {
+    flex: 1 1 0 !important;
+    min-width: 38px !important;
+    max-width: 52px !important;
+    min-height: 36px !important;
+    padding: 0 8px !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+    border: 1px solid #dbe4ef !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    color: #0f172a !important;
+}
+
+.planning-native-rating-radio span {
+    font-size: 14px !important;
+    font-weight: 700 !important;
+}
+
+.planning-native-rating-radio input[type="radio"] {
+    margin: 0 4px 0 0 !important;
+}
+
+.planning-native-rating-submit button {
+    width: 100% !important;
+    min-height: 38px !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    padding: 0 14px !important;
+}
+
+.planning-control-row {
+    width: 100% !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin: 10px 0 0 0 !important;
+    border: 1px solid #dbe4ef;
+    border-radius: 8px;
+    background: #ffffff;
+    padding: 8px 10px;
+}
+
+.planning-control-panel-wrap {
+    min-width: 0 !important;
+}
+
+.planning-control-panel {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.planning-control-progress {
+    min-width: 0;
+    flex: 1;
+}
+
+.planning-control-progress > div {
+    justify-content: flex-start !important;
+    margin-top: 0 !important;
+    gap: 5px !important;
+}
+
+.planning-control-progress span {
+    font-size: 11px !important;
+    padding: 3px 7px !important;
+}
+
+.planning-control-hint {
+    flex: 0 0 auto;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.planning-control-hint.muted {
+    color: #94a3b8;
+    font-weight: 600;
+}
+
+.planning-native-rating-card {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    min-width: 330px !important;
+}
+
+.planning-score-radio {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+.planning-score-radio fieldset {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    margin: 0 !important;
+}
+
+.planning-score-radio label {
+    min-width: 30px !important;
+    min-height: 30px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: 8px !important;
+}
+
+.planning-score-radio span {
+    font-size: 13px !important;
+    font-weight: 700 !important;
+}
+
+.planning-score-submit button {
+    min-width: 54px !important;
+    min-height: 32px !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
 }
 
 .custom-message-label {

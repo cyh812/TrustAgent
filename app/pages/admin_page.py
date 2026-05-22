@@ -9,12 +9,15 @@ from app.services.account_service import (
     INITIATIVE_OPTIONS,
     STANCE_STRATEGY_OPTIONS,
     TRANSPARENCY_OPTIONS,
+    assign_plan_quota,
     assign_balanced_chat_task_configs,
     create_or_reset_account,
     delete_account_and_records,
     initial_chat_config_admin_view,
+    initial_plan_config_admin_view,
     refresh_chat_config_admin_view,
     refresh_account_admin_view,
+    refresh_plan_config_admin_view,
 )
 from app.services.user_data_service import (
     USER_RECORD_COLUMNS,
@@ -234,9 +237,32 @@ def build_admin_demo():
                         gr.Markdown("页面待扩展。")
 
                 with gr.Tab("规划任务配置"):
-                    with gr.Column(elem_classes=["admin-section", "admin-placeholder"]):
+                    with gr.Column(elem_classes=["admin-section"]):
                         gr.Markdown("## 规划任务配置")
-                        gr.Markdown("页面待扩展。")
+                        plan_config_summary, plan_account_choices, _plan_account_rows = initial_plan_config_admin_view()
+
+                        with gr.Row():
+                            plan_account_select = gr.Dropdown(
+                                choices=plan_account_choices,
+                                value=None,
+                                label="账号",
+                                interactive=True,
+                                scale=7,
+                            )
+                            plan_quota_count = gr.Number(
+                                label="增加规划任务次数",
+                                value=1,
+                                precision=0,
+                                interactive=True,
+                                scale=2,
+                            )
+
+                        with gr.Row():
+                            add_plan_quota_btn = gr.Button("增加规划任务", variant="primary")
+                            refresh_plan_config_btn = gr.Button("刷新账号列表", variant="secondary")
+
+                        plan_config_status = gr.Markdown("等待配置。")
+                        plan_config_summary_box = gr.Markdown(plan_config_summary)
 
         generate_btn.click(
             create_or_reset_account,
@@ -253,6 +279,13 @@ def build_admin_demo():
                 chat_config_table,
                 account_table,
             ],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
+                account_table,
+            ],
         )
 
         refresh_btn.click(
@@ -264,6 +297,13 @@ def build_admin_demo():
                 chat_config_summary_box,
                 chat_account_select,
                 chat_config_table,
+                account_table,
+            ],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
                 account_table,
             ],
         )
@@ -291,6 +331,13 @@ def build_admin_demo():
                 user_record_table,
                 export_user_record_status,
                 export_user_record_file,
+            ],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
+                account_table,
             ],
         )
 
@@ -350,6 +397,13 @@ def build_admin_demo():
                 chat_config_table,
                 account_table,
             ],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
+                account_table,
+            ],
         )
 
         refresh_chat_config_btn.click(
@@ -358,6 +412,42 @@ def build_admin_demo():
                 chat_config_summary_box,
                 chat_account_select,
                 chat_config_table,
+                account_table,
+            ],
+        ).then(
+            refresh_account_admin_view,
+            outputs=[account_summary_box, account_table],
+        )
+
+        add_plan_quota_btn.click(
+            assign_plan_quota,
+            inputs=[plan_account_select, plan_quota_count],
+            outputs=[plan_config_status, account_table],
+        ).then(
+            refresh_account_admin_view,
+            outputs=[account_summary_box, account_table],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
+                account_table,
+            ],
+        ).then(
+            refresh_chat_config_admin_view,
+            outputs=[
+                chat_config_summary_box,
+                chat_account_select,
+                chat_config_table,
+                account_table,
+            ],
+        )
+
+        refresh_plan_config_btn.click(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
                 account_table,
             ],
         ).then(

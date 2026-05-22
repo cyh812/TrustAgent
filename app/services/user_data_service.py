@@ -5,6 +5,7 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 
 import gradio as gr
 
@@ -139,6 +140,75 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
         gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
     )
 
+
+
+def save_planning_record(planning_records, started_at, planning_state, planning_context=None):
+    planning_context = planning_context or EXPERIMENT_CONTEXT
+    records = list(planning_records or [])
+    state = dict(planning_state or {})
+    started_time = str(started_at or "").strip() or current_time_text()
+    ended_time = current_time_text()
+    account_id = get_context_value("account_id", context=planning_context)
+    experiment_key = get_context_value("experiment_key", context=planning_context)
+    subject_name = get_context_value("subject_name", context=planning_context)
+    llm_settings = get_llm_settings()
+
+    payload = {
+        "metadata": {
+            "account_id": account_id,
+            "experiment_key": experiment_key,
+            "subject_name": subject_name,
+            "task_name": "规划",
+            "planning_topic": get_context_value("planning_topic", "旅行", context=planning_context),
+            "started_at": started_time,
+            "ended_at": ended_time,
+        },
+        "runtime_config": {
+            "temperature": float(RUNTIME_CONFIG["temperature"]),
+            "max_tokens": int(RUNTIME_CONFIG["max_tokens"]),
+            "model": llm_settings.model,
+            "provider": llm_settings.provider,
+            "base_url": llm_settings.base_url,
+        },
+        "planning_state": state,
+        "planning_records": records,
+    }
+
+    with connect_db() as conn:
+        ensure_record_table(conn)
+        conn.execute(
+            """
+            INSERT INTO experiment_records (
+                account_id,
+                experiment_key,
+                subject_name,
+                task_name,
+                started_at,
+                ended_at,
+                message_count,
+                transcript_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                experiment_key,
+                subject_name,
+                "规划",
+                started_time,
+                ended_time,
+                count_chat_messages(records),
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            ),
+        )
+
+    return (
+        f"规划实验已结束，记录已保存。账号：`{account_id}`。",
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={quote(account_id)}'>"),
+    )
 
 
 def list_user_record_rows(account_id=None) -> List[List[Any]]:

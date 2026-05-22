@@ -427,6 +427,54 @@ def initial_chat_config_admin_view():
     return chat_config_summary(), list_account_choices(), list_chat_config_rows(), list_account_rows()
 
 
+def plan_config_summary() -> str:
+    rows = list_account_rows()
+    total_quota = sum(int(row[6] or 0) for row in rows)
+    return f"当前共有 {len(rows)} 个账号；剩余规划任务次数合计 {total_quota} 次。"
+
+
+def refresh_plan_config_admin_view():
+    return (
+        plan_config_summary(),
+        gr.update(choices=list_account_choices(), value=None),
+        list_account_rows(),
+    )
+
+
+def initial_plan_config_admin_view():
+    return plan_config_summary(), list_account_choices(), list_account_rows()
+
+
+def assign_plan_quota(account_choice, quota_count):
+    account_id = parse_account_choice(account_choice)
+    if not account_id:
+        return "请选择账号。", list_account_rows()
+    if not get_account(account_id):
+        return f"账号 `{account_id}` 不存在。", list_account_rows()
+
+    try:
+        count = int(quota_count or 0)
+    except (TypeError, ValueError):
+        return "请输入有效的规划任务次数。", list_account_rows()
+
+    if count <= 0:
+        return "规划任务次数必须大于 0。", list_account_rows()
+
+    now = current_time_text()
+    with connect_db() as conn:
+        ensure_account_table(conn)
+        conn.execute(
+            """
+            UPDATE experiment_accounts
+            SET plan_quota = plan_quota + ?, updated_at = ?
+            WHERE account_id = ?
+            """,
+            (count, now, account_id),
+        )
+
+    return f"已为账号 `{account_id}` 增加 {count} 次规划任务。", list_account_rows()
+
+
 def normalize_topic_selection(topics) -> List[str]:
     if topics is None:
         return []

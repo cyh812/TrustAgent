@@ -47,7 +47,7 @@ def build_chat_demo():
                 trust_score = gr.Radio(
                     choices=[str(i) for i in range(1, 8)],
                     value=None,
-                    label="请你对当前LLM Agent所产生的信任感水平进行打分",
+                    label="请你对当前LLM Agent表现所产生的信任感水平进行打分",
                     visible=False,
                     interactive=True,
                     elem_classes=["custom-trust-radio"],
