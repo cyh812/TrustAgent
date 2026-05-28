@@ -21,6 +21,8 @@ from app.services.account_service import (
 )
 from app.services.user_data_service import (
     USER_RECORD_COLUMNS,
+    USER_RECORD_TASK_ALL,
+    USER_RECORD_TASK_CHOICES,
     export_user_records_zip,
     list_user_record_choices,
     refresh_user_record_view,
@@ -93,10 +95,17 @@ def build_admin_demo():
                                 value=None,
                                 label="按账号ID选择用户",
                                 interactive=True,
-                                scale=7,
+                                scale=5,
+                            )
+                            user_record_task_select = gr.Dropdown(
+                                choices=USER_RECORD_TASK_CHOICES,
+                                value=USER_RECORD_TASK_ALL,
+                                label="按任务类型筛选",
+                                interactive=True,
+                                scale=2,
                             )
                             export_user_record_btn = gr.Button(
-                                "导出该用户记录",
+                                "导出筛选记录",
                                 variant="primary",
                                 scale=2,
                             )
@@ -343,7 +352,18 @@ def build_admin_demo():
 
         user_record_select.change(
             select_user_record_account,
-            inputs=[user_record_select],
+            inputs=[user_record_select, user_record_task_select],
+            outputs=[
+                user_record_summary_box,
+                user_record_table,
+                export_user_record_status,
+                export_user_record_file,
+            ],
+        )
+
+        user_record_task_select.change(
+            select_user_record_account,
+            inputs=[user_record_select, user_record_task_select],
             outputs=[
                 user_record_summary_box,
                 user_record_table,
@@ -354,7 +374,7 @@ def build_admin_demo():
 
         export_user_record_btn.click(
             export_user_records_zip,
-            inputs=[user_record_select],
+            inputs=[user_record_select, user_record_task_select],
             outputs=[export_user_record_status, export_user_record_file],
         )
 

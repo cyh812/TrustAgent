@@ -18,6 +18,8 @@ from app.services.key_service import connect_db, current_time_text
 
 
 USER_RECORD_COLUMNS = ["记录ID", "账号ID", "密钥", "任务", "姓名", "开始时间", "结束时间", "消息数"]
+USER_RECORD_TASK_ALL = "全部任务"
+USER_RECORD_TASK_CHOICES = [USER_RECORD_TASK_ALL, "聊天", "问答", "规划"]
 
 
 def ensure_record_table(conn: sqlite3.Connection) -> None:
@@ -211,28 +213,37 @@ def save_planning_record(planning_records, started_at, planning_state, planning_
     )
 
 
-def list_user_record_rows(account_id=None) -> List[List[Any]]:
+def normalize_record_task(task_name=None) -> str:
+    clean_task = str(task_name or "").strip()
+    if not clean_task or clean_task == USER_RECORD_TASK_ALL:
+        return ""
+    return clean_task
+
+
+def list_user_record_rows(account_id=None, task_name=None) -> List[List[Any]]:
     clean_account_id = str(account_id or "").strip()
+    clean_task = normalize_record_task(task_name)
+    where_parts = []
+    params = []
+    if clean_account_id:
+        where_parts.append("account_id = ?")
+        params.append(clean_account_id)
+    if clean_task:
+        where_parts.append("task_name = ?")
+        params.append(clean_task)
+    where_sql = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
     with connect_db() as conn:
         ensure_record_table(conn)
-        if clean_account_id:
-            rows = conn.execute(
-                """
-                SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
-                FROM experiment_records
-                WHERE account_id = ?
-                ORDER BY ended_at DESC, id DESC
-                """,
-                (clean_account_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                """
-                SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
-                FROM experiment_records
-                ORDER BY ended_at DESC, id DESC
-                """
-            ).fetchall()
+        rows = conn.execute(
+            f"""
+            SELECT id, account_id, experiment_key, task_name, subject_name, started_at, ended_at, message_count
+            FROM experiment_records
+            {where_sql}
+            ORDER BY ended_at DESC, id DESC
+            """,
+            tuple(params),
+        ).fetchall()
     return [list(row) for row in rows]
 
 
@@ -276,16 +287,18 @@ def parse_account_choice(choice) -> str:
     return str(choice).split("|", 1)[0].strip()
 
 
-def select_user_record_account(choice):
+def select_user_record_account(choice, task_name=USER_RECORD_TASK_ALL):
     account_id = parse_account_choice(choice)
+    clean_task = normalize_record_task(task_name)
+    task_label = clean_task or "全部任务"
     if not account_id:
         return "Select a user.", [], "No user selected. Export is unavailable.", gr.update(value=None)
 
-    rows = list_user_record_rows(account_id)
+    rows = list_user_record_rows(account_id, clean_task)
     return (
-        f"Account `{account_id}` has {len(rows)} chat records.",
+        f"Account `{account_id}` has {len(rows)} `{task_label}` records.",
         rows,
-        "You can export all chat records for the selected user.",
+        f"You can export `{task_label}` records for the selected user.",
         gr.update(value=None),
     )
 
@@ -295,30 +308,39 @@ def safe_export_name(value: str) -> str:
     return safe or "unknown"
 
 
-def export_user_records_zip(choice):
+def export_user_records_zip(choice, task_name=USER_RECORD_TASK_ALL):
     account_id = parse_account_choice(choice)
     if not account_id:
         return "Select a user before exporting.", gr.update(value=None)
 
+    clean_task = normalize_record_task(task_name)
+    where_task_sql = "AND task_name = ?" if clean_task else ""
+    params = [account_id]
+    if clean_task:
+        params.append(clean_task)
+
     with connect_db() as conn:
         ensure_record_table(conn)
         rows = conn.execute(
-            """
+            f"""
             SELECT id, transcript_json
             FROM experiment_records
             WHERE account_id = ?
+            {where_task_sql}
             ORDER BY ended_at ASC, id ASC
             """,
-            (account_id,),
+            tuple(params),
         ).fetchall()
 
     if not rows:
-        return f"Account `{account_id}` has no records to export.", gr.update(value=None)
+        task_label = clean_task or "all tasks"
+        return f"Account `{account_id}` has no `{task_label}` records to export.", gr.update(value=None)
 
     export_dir = PROJECT_ROOT / "data" / "exports"
     export_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    zip_path = export_dir / f"trustagent_{safe_export_name(account_id)}_{timestamp}.zip"
+    task_part = safe_export_name(clean_task or "all")
+    zip_path = export_dir / f"trustagent_{safe_export_name(account_id)}_{task_part}_{timestamp}.zip"
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zip_file:
         for record_id, transcript_json in rows:
@@ -333,8 +355,9 @@ def export_user_records_zip(choice):
         return "Export failed: zip file was not created.", gr.update(value=None)
 
     download_url = f"/exports/{zip_path.name}"
+    task_label = clean_task or "all tasks"
     return (
-        f"Exported {len(rows)} records for account `{account_id}`. "
+        f"Exported {len(rows)} `{task_label}` records for account `{account_id}`. "
         f"[Download zip]({download_url})",
         str(zip_path.resolve()),
     )
@@ -351,10 +374,11 @@ def parse_record_id(choice) -> Optional[int]:
         return None
 
 
-def load_user_record(choice):
+def load_user_record(choice, task_name=USER_RECORD_TASK_ALL):
     account_id = parse_account_choice(choice)
-    rows = list_user_record_rows(account_id) if account_id else []
-    return f"Account `{account_id}` has {len(rows)} chat records.", rows
+    rows = list_user_record_rows(account_id, task_name) if account_id else []
+    task_label = normalize_record_task(task_name) or "全部任务"
+    return f"Account `{account_id}` has {len(rows)} `{task_label}` records.", rows
 
 
 def refresh_user_record_view():
