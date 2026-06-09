@@ -28,15 +28,14 @@ RUNTIME_CONFIG: Dict[str, object] = {
 CHAT_SYSTEM_PROMPT_TEMPLATE = """
 请使用简体中文进行自然对话，并保持以下对话风格：
 
+【社会情感表达】
 {emotional_valence_prompt}
 
+【认知透明表达】
 {transparency_prompt}
 
+【对话立场对齐】
 {stance_strategy_prompt}
-
-{certainty_prompt}
-
-{initiative_prompt}
 
 默认使用简体中文回答。
 
@@ -57,13 +56,9 @@ EXPERIMENT_CONTEXT: Dict[str, str] = {
     "emotional_valence_level": "",
     "transparency_level": "",
     "stance_strategy_level": "",
-    "certainty_level": "",
-    "initiative_level": "",
     "emotional_valence_prompt": "",
     "transparency_prompt": "",
     "stance_strategy_prompt": "",
-    "certainty_prompt": "",
-    "initiative_prompt": "",
 }
 
 MODEL_OPTIONS = [

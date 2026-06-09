@@ -1,6 +1,7 @@
 import gradio as gr
 
 from app.services.experiment_service import (
+    confirm_custom_chat_rating,
     initialize_custom_chat_window,
     initialize_custom_chat_session,
     render_custom_chat,
@@ -30,6 +31,31 @@ def build_chat_demo():
                 elem_id="custom-chat-window",
             )
 
+            with gr.Row(visible=False, elem_classes=["trust-end-row"]) as trust_rating_row:
+                trust_score = gr.Radio(
+                    choices=[str(i) for i in range(1, 8)],
+                    value=None,
+                    label="请你对当前LLM Agent表现所产生的信任感水平进行打分",
+                    visible=False,
+                    interactive=True,
+                    elem_classes=["custom-trust-radio"],
+                    scale=8,
+                )
+                confirm_trust_score_btn = gr.Button(
+                    "确认打分",
+                    variant="primary",
+                    visible=False,
+                    scale=2,
+                    elem_classes=["trust-end-btn"],
+                )
+                end_experiment_btn = gr.Button(
+                    "结束实验",
+                    variant="stop",
+                    visible=False,
+                    scale=2,
+                    elem_classes=["trust-end-btn"],
+                )
+
             with gr.Group(elem_classes=["composer-wrap"]):
                 chat_message = gr.Textbox(
                     placeholder="输入消息后点击发送按钮。",
@@ -42,30 +68,12 @@ def build_chat_demo():
                     variant="primary",
                     elem_classes=["send-inside-btn"],
                 )
-
-            with gr.Row(elem_classes=["trust-end-row"]):
-                trust_score = gr.Radio(
-                    choices=[str(i) for i in range(1, 8)],
-                    value=None,
-                    label="请你对当前LLM Agent表现所产生的信任感水平进行打分",
-                    visible=False,
-                    interactive=True,
-                    elem_classes=["custom-trust-radio"],
-                    scale=8,
-                )
-                end_experiment_btn = gr.Button(
-                    "结束实验",
-                    variant="stop",
-                    visible=False,
-                    scale=2,
-                    elem_classes=["trust-end-btn"],
-                )
             save_status = gr.Markdown("")
             redirect_html = gr.HTML("")
 
         chat_message.submit(
             respond_custom_chat,
-            inputs=[chat_message, chat_records_state, chat_llm_history_state, chat_context_state],
+            inputs=[chat_message, chat_records_state, chat_llm_history_state, chat_context_state, trust_score],
             outputs=[
                 chat_message,
                 chat_window,
@@ -74,13 +82,15 @@ def build_chat_demo():
                 chat_message,
                 chat_send_btn,
                 trust_score,
+                confirm_trust_score_btn,
                 end_experiment_btn,
+                trust_rating_row,
             ],
             concurrency_limit=8,
         )
         chat_send_btn.click(
             respond_custom_chat,
-            inputs=[chat_message, chat_records_state, chat_llm_history_state, chat_context_state],
+            inputs=[chat_message, chat_records_state, chat_llm_history_state, chat_context_state, trust_score],
             outputs=[
                 chat_message,
                 chat_window,
@@ -89,9 +99,26 @@ def build_chat_demo():
                 chat_message,
                 chat_send_btn,
                 trust_score,
+                confirm_trust_score_btn,
                 end_experiment_btn,
+                trust_rating_row,
             ],
             concurrency_limit=8,
+        )
+        confirm_trust_score_btn.click(
+            confirm_custom_chat_rating,
+            inputs=[trust_score, chat_records_state, chat_llm_history_state, chat_context_state],
+            outputs=[
+                chat_window,
+                chat_records_state,
+                chat_llm_history_state,
+                chat_message,
+                chat_send_btn,
+                trust_score,
+                confirm_trust_score_btn,
+                end_experiment_btn,
+                trust_rating_row,
+            ],
         )
         end_experiment_btn.click(
             save_chat_record,

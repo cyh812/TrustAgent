@@ -1,12 +1,13 @@
+﻿import random
 import sqlite3
-from itertools import permutations
+from itertools import product
 from typing import Any, Dict, List, Tuple
 from urllib.parse import quote
 
 import gradio as gr
 
 from app.config import EXPERIMENT_CONTEXT
-from app.services.key_service import connect_db, current_time_text, make_key
+from app.services.key_service import connect_db, current_time_text
 
 
 ACCOUNT_TABLE_COLUMNS = [
@@ -46,86 +47,78 @@ CHAT_TOPIC_CONFIGS = [
         "topic": "数字生活与注意力分散",
         "userInstruction": "请围绕“手机使用、注意力分散、信息干扰或数字生活习惯”等内容，与 Agent 自然展开聊天。",
     },
+    {
+        "topic": "生活选择与未来规划",
+        "userInstruction": "请围绕“职业发展、人生规划、未来目标、选择与不确定性”等内容，与 Agent 自然展开聊天。"
+    },
+    {
+        "topic": "亲密关系与情感困惑",
+        "userInstruction": "请围绕“恋爱关系、亲密关系、情感困惑、沟通与理解”等内容，与 Agent 自然展开聊天。"
+    }
 ]
 
 CHAT_TOPICS = [item["topic"] for item in CHAT_TOPIC_CONFIGS]
 CHAT_TOPIC_INSTRUCTIONS = {item["topic"]: item["userInstruction"] for item in CHAT_TOPIC_CONFIGS}
 
 EMOTIONAL_VALENCE_PROMPTS = {
-    "理性导向": "回答时以分析和事实为主，尽量减少情绪安慰和共情表达。",
-    "感性导向": "回答时优先表达理解和支持，强调情绪回应与共情。",
-    "中立导向": "回答时先简要回应用户感受，再提供客观分析和建议。",
+    "理性导向型": "回答时以任务分析和问题解决为核心，强调逻辑性、结构性和信息效率，不需要情绪安慰、共情表达等内容。",
+    "感性导向型": "回答时优先回应用户情绪与心理状态，强调理解、支持和陪伴感，更多使用安慰性、鼓励性和情感化表达。",
 }
 
 TRANSPARENCY_PROMPTS = {
-    "低透明": "直接给出观点或建议，不主动解释判断依据。",
-    "中透明": "给出观点时简要说明主要理由，并适度提示适用条件。",
-    "高透明": "明确说明判断依据、关键假设、局限和可能的替代情况。",
+    "低透明度": "回答时直接给出结论或建议，尽量减少推理过程、依据说明和知识边界解释，整体表达更明确和确定。",
+    "高透明度": "回答时不仅解释原因和判断依据，还主动说明当前信息限制、可能存在的不确定性以及结论的适用边界。",
 }
 
 STANCE_STRATEGY_PROMPTS = {
-    "用户立场": "优先贴近用户的观点和感受，以支持和认同为主要回应方式。",
-    "协商导向": "先认可用户观点的合理性，再温和补充其他角度。",
-    "独立客观": "保持相对中立和独立的视角，不主动贴近用户立场。",
-}
-
-CERTAINTY_PROMPTS = {
-    "确定型": "使用明确肯定的语气表达结论，尽量减少保留性表述。",
-    "开放型": "使用“可能”“也许”等措辞，呈现多种合理可能性。",
-    "不确定型": "明确指出信息不足和判断局限，强调结论存在较大不确定性。",
-}
-
-INITIATIVE_PROMPTS = {
-    "被动响应": "只回答用户当前问题，不主动追问或扩展话题。",
-    "适应主动": "在回答后适度追问或补充，引导对话自然深入。",
-    "高主动": "主动规划讨论方向，持续提出问题和下一步建议。",
+    "用户立场型": "回答时倾向于优先认可和支持用户观点，尽量减少直接反驳，主动推进用户立场的对话。",
+    "独立客观型": "回答时更强调独立分析与客观判断，即使与用户观点不一致，也必须明确指出问题并提供独立意见。",
 }
 
 EMOTIONAL_VALENCE_OPTIONS = list(EMOTIONAL_VALENCE_PROMPTS.keys())
 TRANSPARENCY_OPTIONS = list(TRANSPARENCY_PROMPTS.keys())
 STANCE_STRATEGY_OPTIONS = list(STANCE_STRATEGY_PROMPTS.keys())
-CERTAINTY_OPTIONS = list(CERTAINTY_PROMPTS.keys())
-INITIATIVE_OPTIONS = list(INITIATIVE_PROMPTS.keys())
 
 FEATURE_DIMENSION_CONFIGS = {
     "emotional_valence": {
-        "label": "情感效价",
+        "label": "社会情感表达",
         "options": EMOTIONAL_VALENCE_OPTIONS,
         "prompt_map": EMOTIONAL_VALENCE_PROMPTS,
     },
     "transparency": {
-        "label": "透明度水平",
+        "label": "认知透明表达",
         "options": TRANSPARENCY_OPTIONS,
         "prompt_map": TRANSPARENCY_PROMPTS,
     },
     "stance_strategy": {
-        "label": "立场策略",
+        "label": "对话立场对齐",
         "options": STANCE_STRATEGY_OPTIONS,
         "prompt_map": STANCE_STRATEGY_PROMPTS,
     },
-    "certainty": {
-        "label": "表达确定性",
-        "options": CERTAINTY_OPTIONS,
-        "prompt_map": CERTAINTY_PROMPTS,
-    },
-    "initiative": {
-        "label": "主动性水平",
-        "options": INITIATIVE_OPTIONS,
-        "prompt_map": INITIATIVE_PROMPTS,
-    },
 }
 
-BALANCED_OPTION_ORDERS = list(permutations((0, 1, 2)))
+CHAT_STYLE_COMBINATIONS = [
+    {
+        "emotional_valence": emotional_valence,
+        "transparency": transparency,
+        "stance_strategy": stance_strategy,
+    }
+    for emotional_valence, transparency, stance_strategy in product(
+        EMOTIONAL_VALENCE_OPTIONS,
+        TRANSPARENCY_OPTIONS,
+        STANCE_STRATEGY_OPTIONS,
+    )
+]
 
 CHAT_CONFIG_TABLE_COLUMNS = [
     "配置ID",
     "账号ID",
     "主题",
-    "情感效价",
-    "透明度水平",
-    "立场策略",
-    "表达确定性",
-    "主动性水平",
+    "社会情感表达",
+    "认知透明表达",
+    "对话立场对齐",
+    "保留字段1",
+    "保留字段2",
     "状态",
     "创建时间",
     "使用时间",
@@ -144,6 +137,11 @@ def request_account_id(request) -> str:
 def request_chat_config_id(request) -> str:
     query_params = getattr(request, "query_params", {}) or {}
     return str(query_params.get("chat_config_id") or "").strip()
+
+
+def request_qa_config_id(request) -> str:
+    query_params = getattr(request, "query_params", {}) or {}
+    return str(query_params.get("qa_config_id") or "").strip()
 
 
 def ensure_account_table(conn: sqlite3.Connection) -> None:
@@ -194,6 +192,21 @@ def ensure_chat_config_table(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE chat_task_configs ADD COLUMN certainty_level TEXT NOT NULL DEFAULT '确定型'")
     if "initiative_level" not in columns:
         conn.execute("ALTER TABLE chat_task_configs ADD COLUMN initiative_level TEXT NOT NULL DEFAULT '被动响应'")
+
+
+def ensure_qa_config_table(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS qa_task_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            account_id TEXT NOT NULL,
+            target_accuracy REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TEXT NOT NULL,
+            used_at TEXT
+        )
+        """
+    )
 
 
 def normalize_account_id(account_id) -> str:
@@ -277,13 +290,16 @@ def parse_account_choice(choice) -> str:
     return str(choice).split("|", 1)[0].strip()
 
 
-def create_or_reset_account(account_id, key_prefix="TA") -> Tuple[str, List[List[Any]]]:
+def create_or_reset_account(account_id, password) -> Tuple[str, List[List[Any]]]:
     clean_account_id = normalize_account_id(account_id)
     if not clean_account_id:
         return "请输入账号ID。", list_account_rows()
 
+    clean_password = normalize_secret(password)
+    if not clean_password:
+        return "请输入账号密码。", list_account_rows()
+
     now = current_time_text()
-    password_key = make_key(key_prefix)
 
     with connect_db() as conn:
         ensure_account_table(conn)
@@ -298,20 +314,20 @@ def create_or_reset_account(account_id, key_prefix="TA") -> Tuple[str, List[List
                 SET password_key = ?, updated_at = ?
                 WHERE account_id = ?
                 """,
-                (password_key, now, clean_account_id),
+                (clean_password, now, clean_account_id),
             )
-            return f"账号 `{clean_account_id}` 的密钥已重新生成：`{password_key}`", list_account_rows()
+            return f"账号 `{clean_account_id}` 的密码已更新。", list_account_rows()
 
         conn.execute(
             """
             INSERT INTO experiment_accounts (
                 account_id, password_key, name, phone, chat_quota, qa_quota, plan_quota, created_at, updated_at
             )
-            VALUES (?, ?, '', '', 0, 1, 1, ?, ?)
+            VALUES (?, ?, '', '', 0, 0, 0, ?, ?)
             """,
-            (clean_account_id, password_key, now, now),
+            (clean_account_id, clean_password, now, now),
         )
-    return f"账号 `{clean_account_id}` 已创建，密钥：`{password_key}`", list_account_rows()
+    return f"账号 `{clean_account_id}` 已创建。", list_account_rows()
 
 
 
@@ -377,13 +393,9 @@ def delete_account_and_records(account_id):
                 "emotional_valence_level": "",
                 "transparency_level": "",
                 "stance_strategy_level": "",
-                "certainty_level": "",
-                "initiative_level": "",
                 "emotional_valence_prompt": "",
                 "transparency_prompt": "",
                 "stance_strategy_prompt": "",
-                "certainty_prompt": "",
-                "initiative_prompt": "",
             }
         )
 
@@ -443,6 +455,81 @@ def refresh_plan_config_admin_view():
 
 def initial_plan_config_admin_view():
     return plan_config_summary(), list_account_choices(), list_account_rows()
+
+
+def qa_config_summary() -> str:
+    rows = list_account_rows()
+    total_quota = sum(int(row[5] or 0) for row in rows)
+    with connect_db() as conn:
+        ensure_qa_config_table(conn)
+        pending = conn.execute("SELECT COUNT(*) FROM qa_task_configs WHERE status = 'pending'").fetchone()[0]
+    return f"当前共有 {len(rows)} 个账号；剩余问答任务次数合计 {total_quota} 次；待使用问答配置 {pending} 条。"
+
+
+def refresh_qa_config_admin_view():
+    return (
+        qa_config_summary(),
+        gr.update(choices=list_account_choices(), value=None),
+        list_account_rows(),
+    )
+
+
+def initial_qa_config_admin_view():
+    return qa_config_summary(), list_account_choices(), list_account_rows()
+
+
+def normalize_qa_accuracy(value) -> float:
+    raw = str(value or "").strip().replace("%", "")
+    try:
+        number = float(raw)
+    except ValueError:
+        return 0.0
+    if number > 1:
+        number = number / 100
+    return number
+
+
+def assign_qa_quota(account_choice, quota_count, target_accuracy):
+    account_id = parse_account_choice(account_choice)
+    if not account_id:
+        return "请选择账号。", list_account_rows()
+    if not get_account(account_id):
+        return f"账号 `{account_id}` 不存在。", list_account_rows()
+
+    try:
+        count = int(quota_count or 0)
+    except (TypeError, ValueError):
+        return "请输入有效的问答任务次数。", list_account_rows()
+
+    if count <= 0:
+        return "问答任务次数必须大于 0。", list_account_rows()
+
+    accuracy = normalize_qa_accuracy(target_accuracy)
+    if accuracy not in (0.6, 0.8):
+        return "目标准确率只能选择 60% 或 80%。", list_account_rows()
+
+    now = current_time_text()
+    rows_to_insert = [(account_id, accuracy, now) for _ in range(count)]
+    with connect_db() as conn:
+        ensure_account_table(conn)
+        ensure_qa_config_table(conn)
+        conn.executemany(
+            """
+            INSERT INTO qa_task_configs (account_id, target_accuracy, created_at)
+            VALUES (?, ?, ?)
+            """,
+            rows_to_insert,
+        )
+        conn.execute(
+            """
+            UPDATE experiment_accounts
+            SET qa_quota = qa_quota + ?, updated_at = ?
+            WHERE account_id = ?
+            """,
+            (count, now, account_id),
+        )
+
+    return f"已为账号 `{account_id}` 增加 {count} 次问答任务，目标准确率 {int(accuracy * 100)}%。", list_account_rows()
 
 
 def assign_plan_quota(account_choice, quota_count):
@@ -531,8 +618,6 @@ def assign_chat_task_config(
     emotional_valence_level,
     transparency_level,
     stance_strategy_level,
-    certainty_level,
-    initiative_level,
 ):
     account_id = parse_account_choice(account_choice)
     if not account_id:
@@ -548,8 +633,6 @@ def assign_chat_task_config(
         "emotional_valence": str(emotional_valence_level or "").strip(),
         "transparency": str(transparency_level or "").strip(),
         "stance_strategy": str(stance_strategy_level or "").strip(),
-        "certainty": str(certainty_level or "").strip(),
-        "initiative": str(initiative_level or "").strip(),
     }
     invalid_labels = validate_feature_values(feature_values)
     if invalid_labels:
@@ -564,8 +647,8 @@ def assign_chat_task_config(
             feature_values["emotional_valence"],
             feature_values["transparency"],
             feature_values["stance_strategy"],
-            feature_values["certainty"],
-            feature_values["initiative"],
+            "未配置",
+            "未配置",
             now,
         )
     ]
@@ -575,17 +658,6 @@ def assign_chat_task_config(
 
 def assign_balanced_chat_task_configs(
     account_choice,
-    topics,
-    emotional_valence_level,
-    emotional_valence_locked,
-    transparency_level,
-    transparency_locked,
-    stance_strategy_level,
-    stance_strategy_locked,
-    certainty_level,
-    certainty_locked,
-    initiative_level,
-    initiative_locked,
 ):
     account_id = parse_account_choice(account_choice)
     if not account_id:
@@ -593,71 +665,35 @@ def assign_balanced_chat_task_configs(
     if not get_account(account_id):
         return f"账号 `{account_id}` 不存在。", list_chat_config_rows(), list_account_rows()
 
-    try:
-        account_number = int(account_id)
-    except ValueError:
-        return "账号ID需要为数字，才能进行基于ID的平衡分配。", list_chat_config_rows(), list_account_rows()
-
-    selected_topics = normalize_topic_selection(topics)
-    if len(selected_topics) not in (3, 6):
-        return "请选择 3 个或 6 个聊天主题。", list_chat_config_rows(), list_account_rows()
-
-    feature_values = {
-        "emotional_valence": str(emotional_valence_level or "").strip(),
-        "transparency": str(transparency_level or "").strip(),
-        "stance_strategy": str(stance_strategy_level or "").strip(),
-        "certainty": str(certainty_level or "").strip(),
-        "initiative": str(initiative_level or "").strip(),
-    }
-    feature_locks = {
-        "emotional_valence": bool(emotional_valence_locked),
-        "transparency": bool(transparency_locked),
-        "stance_strategy": bool(stance_strategy_locked),
-        "certainty": bool(certainty_locked),
-        "initiative": bool(initiative_locked),
-    }
-
-    invalid_labels = validate_feature_values(feature_values)
-    if invalid_labels:
-        return f"请完整选择特征维度：{', '.join(invalid_labels)}。", list_chat_config_rows(), list_account_rows()
-
-    unlocked_keys = [key for key, locked in feature_locks.items() if not locked]
-    if len(unlocked_keys) != 1:
-        return "请恰好锁定 4 个特征维度，并保留 1 个维度未锁定。", list_chat_config_rows(), list_account_rows()
-
-    unlocked_key = unlocked_keys[0]
-    unlocked_config = FEATURE_DIMENSION_CONFIGS[unlocked_key]
-    unlocked_options = unlocked_config["options"]
-    if len(unlocked_options) != 3:
-        return f"{unlocked_config['label']} 需要恰好 3 个子维度才能平衡分配。", list_chat_config_rows(), list_account_rows()
-
-    order = BALANCED_OPTION_ORDERS[account_number % len(BALANCED_OPTION_ORDERS)]
-    balanced_values = [unlocked_options[index] for index in order]
+    if len(CHAT_TOPICS) != 8:
+        return f"当前聊天主题数量为 {len(CHAT_TOPICS)} 个，批量分配需要恰好 8 个主题。", list_chat_config_rows(), list_account_rows()
+    if len(CHAT_STYLE_COMBINATIONS) != 8:
+        return f"当前输出风格组合数量为 {len(CHAT_STYLE_COMBINATIONS)} 个，批量分配需要恰好 8 种组合。", list_chat_config_rows(), list_account_rows()
 
     now = current_time_text()
     rows_to_insert = []
-    for index, selected_topic in enumerate(selected_topics):
-        row_values = dict(feature_values)
-        row_values[unlocked_key] = balanced_values[index % len(balanced_values)]
+    style_rows = list(CHAT_STYLE_COMBINATIONS)
+    random.shuffle(style_rows)
+    for selected_topic, style_values in zip(CHAT_TOPICS, style_rows):
         rows_to_insert.append(
             (
                 account_id,
                 selected_topic,
                 CHAT_TOPIC_INSTRUCTIONS[selected_topic],
-                row_values["emotional_valence"],
-                row_values["transparency"],
-                row_values["stance_strategy"],
-                row_values["certainty"],
-                row_values["initiative"],
+                style_values["emotional_valence"],
+                style_values["transparency"],
+                style_values["stance_strategy"],
+                "未配置",
+                "未配置",
                 now,
             )
         )
 
     insert_chat_task_configs(account_id, rows_to_insert, now)
-    topic_text = "、".join(selected_topics)
+    topic_text = "、".join(CHAT_TOPICS)
     return (
         f"已为账号 `{account_id}` 批量增加 {len(rows_to_insert)} 次聊天任务；"
-        f"未锁定维度：{unlocked_config['label']}；主题：{topic_text}。",
+        f"8 个主题已与 8 种输出风格随机一一匹配：{topic_text}。",
         list_chat_config_rows(),
         list_account_rows(),
     )
@@ -675,7 +711,7 @@ def claim_next_chat_task_config(account_id: str) -> Dict[str, Any]:
         row = conn.execute(
             """
             SELECT id, topic, user_instruction, expression_style_level, transparency_level,
-                   stance_strategy_level, certainty_level, initiative_level
+                   stance_strategy_level
             FROM chat_task_configs
             WHERE account_id = ? AND status = 'pending'
             ORDER BY created_at ASC, id ASC
@@ -714,14 +750,80 @@ def claim_next_chat_task_config(account_id: str) -> Dict[str, Any]:
         "emotional_valence_level": row[3],
         "transparency_level": row[4],
         "stance_strategy_level": row[5],
-        "certainty_level": row[6],
-        "initiative_level": row[7],
         "emotional_valence_prompt": EMOTIONAL_VALENCE_PROMPTS.get(row[3], ""),
         "transparency_prompt": TRANSPARENCY_PROMPTS.get(row[4], ""),
         "stance_strategy_prompt": STANCE_STRATEGY_PROMPTS.get(row[5], ""),
-        "certainty_prompt": CERTAINTY_PROMPTS.get(row[6], ""),
-        "initiative_prompt": INITIATIVE_PROMPTS.get(row[7], ""),
     }
+
+
+def claim_next_qa_task_config(account_id: str) -> Dict[str, Any]:
+    clean_account_id = normalize_account_id(account_id)
+    if not clean_account_id:
+        return {}
+
+    now = current_time_text()
+    with connect_db() as conn:
+        ensure_account_table(conn)
+        ensure_qa_config_table(conn)
+        row = conn.execute(
+            """
+            SELECT id, target_accuracy
+            FROM qa_task_configs
+            WHERE account_id = ? AND status = 'pending'
+            ORDER BY created_at ASC, id ASC
+            LIMIT 1
+            """,
+            (clean_account_id,),
+        ).fetchone()
+        if row is None:
+            return {}
+
+        config_id = int(row[0])
+        updated = conn.execute(
+            """
+            UPDATE experiment_accounts
+            SET qa_quota = qa_quota - 1, updated_at = ?
+            WHERE account_id = ? AND qa_quota > 0
+            """,
+            (now, clean_account_id),
+        ).rowcount
+        if not updated:
+            return {}
+
+        conn.execute(
+            """
+            UPDATE qa_task_configs
+            SET status = 'used', used_at = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (now, config_id),
+        )
+
+    return {"id": config_id, "target_accuracy": float(row[1] or 0)}
+
+
+def get_qa_task_config(account_id: str, config_id) -> Dict[str, Any]:
+    clean_account_id = normalize_account_id(account_id)
+    try:
+        clean_config_id = int(config_id)
+    except (TypeError, ValueError):
+        return {}
+    if not clean_account_id:
+        return {}
+
+    with connect_db() as conn:
+        ensure_qa_config_table(conn)
+        row = conn.execute(
+            """
+            SELECT id, target_accuracy
+            FROM qa_task_configs
+            WHERE id = ? AND account_id = ?
+            """,
+            (clean_config_id, clean_account_id),
+        ).fetchone()
+    if row is None:
+        return {}
+    return {"id": int(row[0]), "target_accuracy": float(row[1] or 0)}
 
 
 def get_chat_task_config(account_id: str, config_id) -> Dict[str, Any]:
@@ -738,7 +840,7 @@ def get_chat_task_config(account_id: str, config_id) -> Dict[str, Any]:
         row = conn.execute(
             """
             SELECT id, topic, user_instruction, expression_style_level, transparency_level,
-                   stance_strategy_level, certainty_level, initiative_level
+                   stance_strategy_level
             FROM chat_task_configs
             WHERE id = ? AND account_id = ?
             """,
@@ -754,13 +856,9 @@ def get_chat_task_config(account_id: str, config_id) -> Dict[str, Any]:
         "emotional_valence_level": row[3],
         "transparency_level": row[4],
         "stance_strategy_level": row[5],
-        "certainty_level": row[6],
-        "initiative_level": row[7],
         "emotional_valence_prompt": EMOTIONAL_VALENCE_PROMPTS.get(row[3], ""),
         "transparency_prompt": TRANSPARENCY_PROMPTS.get(row[4], ""),
         "stance_strategy_prompt": STANCE_STRATEGY_PROMPTS.get(row[5], ""),
-        "certainty_prompt": CERTAINTY_PROMPTS.get(row[6], ""),
-        "initiative_prompt": INITIATIVE_PROMPTS.get(row[7], ""),
     }
 
 
@@ -899,15 +997,26 @@ def start_task(task_key):
         EXPERIMENT_CONTEXT["emotional_valence_level"] = str(chat_config["emotional_valence_level"])
         EXPERIMENT_CONTEXT["transparency_level"] = str(chat_config["transparency_level"])
         EXPERIMENT_CONTEXT["stance_strategy_level"] = str(chat_config["stance_strategy_level"])
-        EXPERIMENT_CONTEXT["certainty_level"] = str(chat_config["certainty_level"])
-        EXPERIMENT_CONTEXT["initiative_level"] = str(chat_config["initiative_level"])
         EXPERIMENT_CONTEXT["emotional_valence_prompt"] = str(chat_config["emotional_valence_prompt"])
         EXPERIMENT_CONTEXT["transparency_prompt"] = str(chat_config["transparency_prompt"])
         EXPERIMENT_CONTEXT["stance_strategy_prompt"] = str(chat_config["stance_strategy_prompt"])
-        EXPERIMENT_CONTEXT["certainty_prompt"] = str(chat_config["certainty_prompt"])
-        EXPERIMENT_CONTEXT["initiative_prompt"] = str(chat_config["initiative_prompt"])
         return (
             f"正在进入{task_name}任务，主题：{chat_config['topic']}；剩余次数：{int(refreshed.get(quota_column) or 0)}。",
+            gr.update(value=f"<meta http-equiv='refresh' content='0;url={TASK_ROUTES[task_key]}'>"),
+        )
+
+    if task_key == "qa":
+        qa_config = claim_next_qa_task_config(account["account_id"])
+        if not qa_config:
+            return "问答任务没有可用配置，无法进入实验。", gr.update(value="")
+
+        refreshed = get_account(account["account_id"])
+        set_current_account(refreshed)
+        EXPERIMENT_CONTEXT["task_name"] = task_name
+        EXPERIMENT_CONTEXT["qa_config_id"] = str(qa_config["id"])
+        EXPERIMENT_CONTEXT["qa_target_accuracy"] = str(qa_config["target_accuracy"])
+        return (
+            f"正在进入{task_name}任务，目标准确率：{int(float(qa_config['target_accuracy']) * 100)}%；剩余次数：{int(refreshed.get(quota_column) or 0)}。",
             gr.update(value=f"<meta http-equiv='refresh' content='0;url={TASK_ROUTES[task_key]}'>"),
         )
 
@@ -966,6 +1075,22 @@ def start_task_for_account(task_key, account_id):
             ),
         )
 
+    if task_key == "qa":
+        qa_config = claim_next_qa_task_config(clean_account_id)
+        if not qa_config:
+            return "问答任务没有可用配置，无法进入实验。", gr.update(value="")
+
+        refreshed = get_account(clean_account_id)
+        return (
+            f"正在进入{task_name}任务，目标准确率：{int(float(qa_config['target_accuracy']) * 100)}%；剩余次数：{int(refreshed.get(quota_column) or 0)}。",
+            gr.update(
+                value=(
+                    "<meta http-equiv='refresh' "
+                    f"content='0;url=/qa?account_id={quoted_account_id}&qa_config_id={qa_config['id']}'>"
+                )
+            ),
+        )
+
     with connect_db() as conn:
         ensure_account_table(conn)
         updated = conn.execute(
@@ -1015,11 +1140,26 @@ def build_chat_context_for_request(request) -> Dict[str, str]:
         "emotional_valence_level": str(chat_config["emotional_valence_level"]),
         "transparency_level": str(chat_config["transparency_level"]),
         "stance_strategy_level": str(chat_config["stance_strategy_level"]),
-        "certainty_level": str(chat_config["certainty_level"]),
-        "initiative_level": str(chat_config["initiative_level"]),
         "emotional_valence_prompt": str(chat_config["emotional_valence_prompt"]),
         "transparency_prompt": str(chat_config["transparency_prompt"]),
         "stance_strategy_prompt": str(chat_config["stance_strategy_prompt"]),
-        "certainty_prompt": str(chat_config["certainty_prompt"]),
-        "initiative_prompt": str(chat_config["initiative_prompt"]),
+    }
+
+
+def build_qa_context_for_request(request) -> Dict[str, str]:
+    account_id = request_account_id(request)
+    account = get_account(account_id)
+    if not account:
+        return {}
+
+    qa_config = get_qa_task_config(account_id, request_qa_config_id(request))
+    target_accuracy = float(qa_config.get("target_accuracy") or 0.6)
+    return {
+        "account_id": account_id,
+        "experiment_key": str(account.get("password_key") or "-"),
+        "subject_name": str(account.get("name") or ""),
+        "phone": str(account.get("phone") or ""),
+        "task_name": TASK_NAMES["qa"],
+        "qa_config_id": str(qa_config.get("id") or ""),
+        "qa_target_accuracy": str(target_accuracy),
     }

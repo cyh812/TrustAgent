@@ -599,16 +599,43 @@ div[data-testid="footer"] {
 .custom-trust-radio {
     width: 100% !important;
     margin: 0 !important;
-    border: 1px solid #dbe4ef;
+    border: 1px solid #bfdbfe;
     border-radius: 8px;
-    background: #ffffff;
-    padding: 12px 14px;
+    background: #eff6ff;
+    padding: 14px 16px;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.08);
+}
+
+.custom-trust-radio .label-wrap,
+.custom-trust-radio legend {
+    color: #1e3a8a !important;
+    font-weight: 800 !important;
+    font-size: 15px !important;
+}
+
+.custom-trust-radio fieldset {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 8px !important;
+    margin-top: 8px !important;
+}
+
+.custom-trust-radio label {
+    min-width: 42px !important;
+    min-height: 38px !important;
+    justify-content: center !important;
+    border: 1px solid #bfdbfe !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
 }
 
 .trust-end-row {
     width: min(760px, 94%) !important;
-    margin: 12px auto 0 auto !important;
+    margin: 12px auto 10px auto !important;
     align-items: stretch !important;
+    gap: 10px !important;
 }
 
 .trust-end-btn {

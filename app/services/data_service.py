@@ -34,6 +34,53 @@ def load_experiment_data() -> Dict[str, object]:
     reading_material = str(raw_obj.get("reading_material", "")).strip()
     questions: List[Dict[str, str]] = []
 
+    flat_questions = raw_obj.get("questions", [])
+    if isinstance(flat_questions, list):
+        for q_index, item in enumerate(flat_questions, start=1):
+            if not isinstance(item, dict):
+                continue
+
+            qid = str(item.get("question_id", f"Q{q_index}")).strip()
+            question_type = str(item.get("question_type", "")).strip()
+            question_text = str(item.get("question", "")).strip()
+            options = item.get("options", {})
+            answer_key = str(item.get("answer", "")).strip()
+            explanation = str(item.get("explanation", "")).strip()
+            feedback = item.get("feedback", {})
+
+            option_choices: List[str] = []
+            answer_text = answer_key
+            if isinstance(options, dict):
+                for opt_key, opt_val in options.items():
+                    k = str(opt_key).strip()
+                    v = str(opt_val).strip()
+                    option_choices.append(f"{k}. {v}")
+                if answer_key in options:
+                    answer_text = f"{answer_key}. {str(options[answer_key]).strip()}"
+
+            normalized_feedback = {}
+            if isinstance(feedback, dict):
+                normalized_feedback = {
+                    str(key).strip(): str(value).strip()
+                    for key, value in feedback.items()
+                    if str(key).strip()
+                }
+
+            questions.append(
+                {
+                    "block_name": question_type or "问答题",
+                    "question_type": question_type,
+                    "question_id": qid,
+                    "question": question_text,
+                    "choices": option_choices,
+                    "answer_key": answer_key,
+                    "answer_text": answer_text,
+                    "explanation": explanation,
+                    "feedback": normalized_feedback,
+                    "has_standard_answer": question_type != "模糊决策",
+                }
+            )
+
     blocks = raw_obj.get("blocks", [])
     if isinstance(blocks, list):
         for block_index, block in enumerate(blocks, start=1):

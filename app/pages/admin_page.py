@@ -4,18 +4,20 @@ from app.services.account_service import (
     ACCOUNT_TABLE_COLUMNS,
     CHAT_CONFIG_TABLE_COLUMNS,
     CHAT_TOPICS,
-    CERTAINTY_OPTIONS,
     EMOTIONAL_VALENCE_OPTIONS,
-    INITIATIVE_OPTIONS,
     STANCE_STRATEGY_OPTIONS,
     TRANSPARENCY_OPTIONS,
+    assign_chat_task_config,
+    assign_qa_quota,
     assign_plan_quota,
     assign_balanced_chat_task_configs,
     create_or_reset_account,
     delete_account_and_records,
     initial_chat_config_admin_view,
+    initial_qa_config_admin_view,
     initial_plan_config_admin_view,
     refresh_chat_config_admin_view,
+    refresh_qa_config_admin_view,
     refresh_account_admin_view,
     refresh_plan_config_admin_view,
 )
@@ -62,14 +64,14 @@ def build_admin_demo():
                                 label="账号ID",
                                 placeholder="请输入账号ID",
                             )
-                            account_key_prefix = gr.Textbox(
-                                label="密钥前缀（可选）",
-                                value="TA",
-                                placeholder="例如 TA",
+                            account_password = gr.Textbox(
+                                label="账号密码",
+                                placeholder="请输入账号密码",
+                                type="password",
                             )
 
                         with gr.Row():
-                            generate_btn = gr.Button("创建/重置账号密钥", variant="primary")
+                            generate_btn = gr.Button("创建/更新账号密码", variant="primary")
                             delete_account_btn = gr.Button("\u5220\u9664\u8d26\u53f7\u53ca\u6570\u636e\u8bb0\u5f55", variant="stop")
                             refresh_btn = gr.Button("刷新账号列表", variant="secondary")
 
@@ -143,91 +145,36 @@ def build_admin_demo():
                                     label="账号",
                                     interactive=True,
                                 )
-                                chat_topic = gr.CheckboxGroup(
+                                chat_topic = gr.Radio(
                                     choices=CHAT_TOPICS,
-                                    value=CHAT_TOPICS[:3],
-                                    label="聊天主题（多选，请选 3 个或 6 个）",
+                                    value=CHAT_TOPICS[0],
+                                    label="单独增加聊天主题",
                                     interactive=True,
                                 )
 
                             with gr.Column(scale=5):
-                                with gr.Row():
-                                    emotional_valence_level = gr.Radio(
-                                        choices=EMOTIONAL_VALENCE_OPTIONS,
-                                        value=EMOTIONAL_VALENCE_OPTIONS[0],
-                                        label="情感效价",
-                                        interactive=True,
-                                        scale=5,
-                                    )
-                                    emotional_valence_locked = gr.Checkbox(
-                                        label="锁定",
-                                        value=True,
-                                        interactive=True,
-                                        scale=1,
-                                    )
-
-                                with gr.Row():
-                                    transparency_level = gr.Radio(
-                                        choices=TRANSPARENCY_OPTIONS,
-                                        value=TRANSPARENCY_OPTIONS[0],
-                                        label="透明度水平",
-                                        interactive=True,
-                                        scale=5,
-                                    )
-                                    transparency_locked = gr.Checkbox(
-                                        label="锁定",
-                                        value=True,
-                                        interactive=True,
-                                        scale=1,
-                                    )
-
-                                with gr.Row():
-                                    stance_strategy_level = gr.Radio(
-                                        choices=STANCE_STRATEGY_OPTIONS,
-                                        value=STANCE_STRATEGY_OPTIONS[0],
-                                        label="立场策略",
-                                        interactive=True,
-                                        scale=5,
-                                    )
-                                    stance_strategy_locked = gr.Checkbox(
-                                        label="锁定",
-                                        value=True,
-                                        interactive=True,
-                                        scale=1,
-                                    )
-
-                                with gr.Row():
-                                    certainty_level = gr.Radio(
-                                        choices=CERTAINTY_OPTIONS,
-                                        value=CERTAINTY_OPTIONS[0],
-                                        label="表达确定性",
-                                        interactive=True,
-                                        scale=5,
-                                    )
-                                    certainty_locked = gr.Checkbox(
-                                        label="锁定",
-                                        value=True,
-                                        interactive=True,
-                                        scale=1,
-                                    )
-
-                                with gr.Row():
-                                    initiative_level = gr.Radio(
-                                        choices=INITIATIVE_OPTIONS,
-                                        value=INITIATIVE_OPTIONS[0],
-                                        label="主动性水平",
-                                        interactive=True,
-                                        scale=5,
-                                    )
-                                    initiative_locked = gr.Checkbox(
-                                        label="锁定",
-                                        value=False,
-                                        interactive=True,
-                                        scale=1,
-                                    )
+                                emotional_valence_level = gr.Radio(
+                                    choices=EMOTIONAL_VALENCE_OPTIONS,
+                                    value=EMOTIONAL_VALENCE_OPTIONS[0],
+                                    label="社会情感表达",
+                                    interactive=True,
+                                )
+                                transparency_level = gr.Radio(
+                                    choices=TRANSPARENCY_OPTIONS,
+                                    value=TRANSPARENCY_OPTIONS[0],
+                                    label="认知透明表达",
+                                    interactive=True,
+                                )
+                                stance_strategy_level = gr.Radio(
+                                    choices=STANCE_STRATEGY_OPTIONS,
+                                    value=STANCE_STRATEGY_OPTIONS[0],
+                                    label="对话立场对齐",
+                                    interactive=True,
+                                )
 
                         with gr.Row():
-                            add_chat_config_btn = gr.Button("批量增加聊天任务", variant="primary")
+                            add_chat_config_btn = gr.Button("批量增加 8 次聊天任务", variant="primary")
+                            add_single_chat_config_btn = gr.Button("单独增加 1 次聊天任务", variant="secondary")
                             refresh_chat_config_btn = gr.Button("刷新配置列表", variant="secondary")
 
                         chat_config_status = gr.Markdown("等待配置。")
@@ -241,9 +188,39 @@ def build_admin_demo():
                             )
 
                 with gr.Tab("问答任务配置"):
-                    with gr.Column(elem_classes=["admin-section", "admin-placeholder"]):
+                    with gr.Column(elem_classes=["admin-section"]):
                         gr.Markdown("## 问答任务配置")
-                        gr.Markdown("页面待扩展。")
+                        qa_config_summary, qa_account_choices, _qa_account_rows = initial_qa_config_admin_view()
+
+                        with gr.Row():
+                            qa_account_select = gr.Dropdown(
+                                choices=qa_account_choices,
+                                value=None,
+                                label="账号",
+                                interactive=True,
+                                scale=6,
+                            )
+                            qa_quota_count = gr.Number(
+                                label="增加问答任务次数",
+                                value=1,
+                                precision=0,
+                                interactive=True,
+                                scale=2,
+                            )
+                            qa_target_accuracy = gr.Radio(
+                                choices=["60%", "80%"],
+                                value="60%",
+                                label="LLM目标准确率",
+                                interactive=True,
+                                scale=2,
+                            )
+
+                        with gr.Row():
+                            add_qa_quota_btn = gr.Button("增加问答任务", variant="primary")
+                            refresh_qa_config_btn = gr.Button("刷新账号列表", variant="secondary")
+
+                        qa_config_status = gr.Markdown("等待配置。")
+                        qa_config_summary_box = gr.Markdown(qa_config_summary)
 
                 with gr.Tab("规划任务配置"):
                     with gr.Column(elem_classes=["admin-section"]):
@@ -275,7 +252,7 @@ def build_admin_demo():
 
         generate_btn.click(
             create_or_reset_account,
-            inputs=[admin_account_id, account_key_prefix],
+            inputs=[admin_account_id, account_password],
             outputs=[account_action_result, account_table],
         ).then(
             refresh_account_admin_view,
@@ -286,6 +263,13 @@ def build_admin_demo():
                 chat_config_summary_box,
                 chat_account_select,
                 chat_config_table,
+                account_table,
+            ],
+        ).then(
+            refresh_qa_config_admin_view,
+            outputs=[
+                qa_config_summary_box,
+                qa_account_select,
                 account_table,
             ],
         ).then(
@@ -306,6 +290,13 @@ def build_admin_demo():
                 chat_config_summary_box,
                 chat_account_select,
                 chat_config_table,
+                account_table,
+            ],
+        ).then(
+            refresh_qa_config_admin_view,
+            outputs=[
+                qa_config_summary_box,
+                qa_account_select,
                 account_table,
             ],
         ).then(
@@ -340,6 +331,13 @@ def build_admin_demo():
                 user_record_table,
                 export_user_record_status,
                 export_user_record_file,
+            ],
+        ).then(
+            refresh_qa_config_admin_view,
+            outputs=[
+                qa_config_summary_box,
+                qa_account_select,
+                account_table,
             ],
         ).then(
             refresh_plan_config_admin_view,
@@ -391,19 +389,36 @@ def build_admin_demo():
 
         add_chat_config_btn.click(
             assign_balanced_chat_task_configs,
+            inputs=[chat_account_select],
+            outputs=[chat_config_status, chat_config_table, account_table],
+        ).then(
+            refresh_account_admin_view,
+            outputs=[account_summary_box, account_table],
+        ).then(
+            refresh_chat_config_admin_view,
+            outputs=[
+                chat_config_summary_box,
+                chat_account_select,
+                chat_config_table,
+                account_table,
+            ],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
+                account_table,
+            ],
+        )
+
+        add_single_chat_config_btn.click(
+            assign_chat_task_config,
             inputs=[
                 chat_account_select,
                 chat_topic,
                 emotional_valence_level,
-                emotional_valence_locked,
                 transparency_level,
-                transparency_locked,
                 stance_strategy_level,
-                stance_strategy_locked,
-                certainty_level,
-                certainty_locked,
-                initiative_level,
-                initiative_locked,
             ],
             outputs=[chat_config_status, chat_config_table, account_table],
         ).then(
@@ -461,6 +476,49 @@ def build_admin_demo():
                 chat_config_table,
                 account_table,
             ],
+        )
+
+        add_qa_quota_btn.click(
+            assign_qa_quota,
+            inputs=[qa_account_select, qa_quota_count, qa_target_accuracy],
+            outputs=[qa_config_status, account_table],
+        ).then(
+            refresh_account_admin_view,
+            outputs=[account_summary_box, account_table],
+        ).then(
+            refresh_qa_config_admin_view,
+            outputs=[
+                qa_config_summary_box,
+                qa_account_select,
+                account_table,
+            ],
+        ).then(
+            refresh_chat_config_admin_view,
+            outputs=[
+                chat_config_summary_box,
+                chat_account_select,
+                chat_config_table,
+                account_table,
+            ],
+        ).then(
+            refresh_plan_config_admin_view,
+            outputs=[
+                plan_config_summary_box,
+                plan_account_select,
+                account_table,
+            ],
+        )
+
+        refresh_qa_config_btn.click(
+            refresh_qa_config_admin_view,
+            outputs=[
+                qa_config_summary_box,
+                qa_account_select,
+                account_table,
+            ],
+        ).then(
+            refresh_account_admin_view,
+            outputs=[account_summary_box, account_table],
         )
 
         refresh_plan_config_btn.click(

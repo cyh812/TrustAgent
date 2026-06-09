@@ -66,9 +66,42 @@ def normalize_custom_records(chat_records):
     return list(chat_records or [])
 
 
+def apply_final_chat_rating(chat_records, trust_score):
+    clean_score = str(trust_score or "").strip()
+    if not clean_score:
+        return
+
+    complete_records = [
+        record
+        for record in chat_records or []
+        if isinstance(record, dict) and str(record.get("assistant") or "").strip()
+    ]
+    if not complete_records:
+        return
+
+    latest_record = complete_records[-1]
+    if latest_record.get("rating") in (None, ""):
+        latest_record["rating"] = clean_score
+        latest_record["rating_timestamp"] = current_time_text()
+
+
+def collect_chat_ratings(chat_records):
+    return [
+        {
+            "turn_index": record.get("turn_index"),
+            "rating": str(record.get("rating") or "").strip(),
+            "rating_timestamp": str(record.get("rating_timestamp") or "").strip(),
+        }
+        for record in chat_records or []
+        if isinstance(record, dict) and record.get("rating") not in (None, "")
+    ]
+
+
 def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
     chat_context = chat_context or EXPERIMENT_CONTEXT
     custom_records = normalize_custom_records(chat_records)
+    apply_final_chat_rating(custom_records, trust_score)
+    chat_ratings = collect_chat_ratings(custom_records)
     started_time = str(started_at or "").strip() or current_time_text()
     ended_time = current_time_text()
     account_id = get_context_value("account_id", context=chat_context)
@@ -89,9 +122,8 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
             "emotional_valence_level": get_context_value("emotional_valence_level", "", context=chat_context),
             "transparency_level": get_context_value("transparency_level", "", context=chat_context),
             "stance_strategy_level": get_context_value("stance_strategy_level", "", context=chat_context),
-            "certainty_level": get_context_value("certainty_level", "", context=chat_context),
-            "initiative_level": get_context_value("initiative_level", "", context=chat_context),
             "trust_score": str(trust_score or "").strip(),
+            "trust_scores": chat_ratings,
             "started_at": started_time,
             "ended_at": ended_time,
         },

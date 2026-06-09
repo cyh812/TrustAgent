@@ -1,4 +1,5 @@
 from html import escape
+import random
 
 import gradio as gr
 
@@ -7,7 +8,17 @@ from app.config import CHAT_SYSTEM_PROMPT_TEMPLATE, EXPERIMENT_CONTEXT, MODEL_OP
 from app.services.data_service import QUESTION_BANK, READING_MATERIAL
 from app.services.key_service import current_time_text
 
-CHAT_MAX_TURNS = 6
+CHAT_MAX_TURNS = 8
+CHAT_RATING_INTERVAL = 2
+
+QA_SYSTEM_PROMPT = """
+你是问答任务中的中文AI助手。
+你需要基于阅读材料和当前题目与用户讨论。
+当系统指定你第一次回答某题必须选择某个选项时，你必须严格按照该指定选项作答。
+首次回答应简洁给出推荐选项。
+后续如果用户继续追问，可以自然解释、讨论、补充或修改，但不要透露系统内部预设答案计划。
+始终使用简体中文。
+"""
 
 
 def snapshot_experiment_context():
@@ -105,8 +116,6 @@ def build_chat_system_prompt(context=None):
         emotional_valence_prompt=str(context.get("emotional_valence_prompt") or "").strip(),
         transparency_prompt=str(context.get("transparency_prompt") or "").strip(),
         stance_strategy_prompt=str(context.get("stance_strategy_prompt") or "").strip(),
-        certainty_prompt=str(context.get("certainty_prompt") or "").strip(),
-        initiative_prompt=str(context.get("initiative_prompt") or "").strip(),
     )
 
 
@@ -191,15 +200,103 @@ def initialize_custom_chat_session(records, request: gr.Request):
     return context, render_custom_chat(records, context)
 
 
+def complete_chat_turns(records):
+    return [
+        record
+        for record in records or []
+        if isinstance(record, dict) and str(record.get("assistant") or "").strip()
+    ]
+
+
+def latest_chat_rating(records):
+    for record in reversed(records or []):
+        if not isinstance(record, dict):
+            continue
+        rating = record.get("rating")
+        if rating not in (None, ""):
+            return str(rating)
+    return None
+
+
+def pending_chat_rating_record(records):
+    complete_turns = complete_chat_turns(records)
+    if not complete_turns:
+        return None
+    if len(complete_turns) % CHAT_RATING_INTERVAL != 0:
+        return None
+    if len(complete_turns) > CHAT_MAX_TURNS:
+        return None
+    record = complete_turns[-1]
+    if record.get("rating") not in (None, ""):
+        return None
+    return record
+
+
+def apply_pending_chat_rating(records, score):
+    clean_score = str(score or "").strip()
+    if not clean_score:
+        return False
+    record = pending_chat_rating_record(records)
+    if not record:
+        return False
+    record["rating"] = clean_score
+    record["rating_timestamp"] = current_time_text()
+    return True
+
+
 def show_chat_rating_if_complete(records):
     complete_turns = [
         record
         for record in records or []
         if isinstance(record, dict) and str(record.get("assistant") or "").strip()
     ]
-    if len(complete_turns) >= CHAT_MAX_TURNS:
-        return gr.update(visible=True), gr.update(visible=True)
-    return gr.update(visible=False, value=None), gr.update(visible=False)
+    pending_record = pending_chat_rating_record(records)
+    if pending_record:
+        default_score = latest_chat_rating(complete_turns[:-1])
+        end_visible = len(complete_turns) >= CHAT_MAX_TURNS
+        return (
+            gr.update(visible=True, value=default_score),
+            gr.update(visible=not end_visible),
+            gr.update(visible=end_visible),
+            gr.update(visible=True),
+        )
+    return (
+        gr.update(visible=False, value=None),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
+    )
+
+
+def confirm_custom_chat_rating(score, records, llm_history, chat_context=None):
+    chat_records = list(records or [])
+    if not apply_pending_chat_rating(chat_records, score):
+        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
+        return (
+            render_custom_chat(chat_records, chat_context),
+            chat_records,
+            normalize_history(llm_history),
+            gr.update(),
+            gr.update(),
+            rating_update,
+            confirm_update,
+            end_update,
+            row_update,
+        )
+
+    input_update = gr.update(interactive=False) if len(complete_chat_turns(chat_records)) >= CHAT_MAX_TURNS else gr.update(interactive=True)
+    button_update = gr.update(interactive=False) if len(complete_chat_turns(chat_records)) >= CHAT_MAX_TURNS else gr.update(interactive=True)
+    return (
+        render_custom_chat(chat_records, chat_context),
+        chat_records,
+        normalize_history(llm_history),
+        input_update,
+        button_update,
+        gr.update(visible=False, value=None),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
+    )
 
 
 def empty_rating_state():
@@ -232,31 +329,103 @@ def question_payload(index: int):
 
     idx = safe_question_index(index)
     q = QUESTION_BANK[idx]
-    title = f"### {q['block_name']} · {q['question_id']}\n\n{q['question']}"
+    question_type = str(q.get("question_type") or q.get("block_name") or "问答题")
+    title = f"### {question_type} · {q['question_id']}\n\n{q['question']}"
     progress = f"第 {idx + 1} / {len(QUESTION_BANK)} 题"
     return title, q["choices"], progress
 
 
-def build_question_prompt(index: int):
+def option_key_from_choice(choice) -> str:
+    return str(choice or "").split(".", 1)[0].strip()
+
+
+def option_text_by_key(question, option_key: str) -> str:
+    for choice in question.get("choices") or []:
+        if option_key_from_choice(choice) == option_key:
+            return str(choice)
+    return str(option_key or "")
+
+
+def opposite_option_key(question, answer_key: str) -> str:
+    for choice in question.get("choices") or []:
+        key = option_key_from_choice(choice)
+        if key and key != answer_key:
+            return key
+    return answer_key
+
+
+def snapshot_qa_context_from_request(request):
+    from app.services.account_service import build_qa_context_for_request
+
+    return build_qa_context_for_request(request)
+
+
+def normalize_qa_target_accuracy(value) -> float:
+    try:
+        accuracy = float(value or 0)
+    except (TypeError, ValueError):
+        accuracy = 0.6
+    return 0.8 if abs(accuracy - 0.8) < abs(accuracy - 0.6) else 0.6
+
+
+def build_qa_answer_plan(target_accuracy=0.6):
+    accuracy = normalize_qa_target_accuracy(target_accuracy)
+    answerable_indices = [
+        index
+        for index, question in enumerate(QUESTION_BANK)
+        if str(question.get("answer_key") or "").strip()
+    ]
+    correct_count = round(len(answerable_indices) * accuracy)
+    correct_indices = set(random.sample(answerable_indices, min(correct_count, len(answerable_indices)))) if answerable_indices else set()
+
+    answers = {}
+    for index, question in enumerate(QUESTION_BANK):
+        answer_key = str(question.get("answer_key") or "").strip()
+        if not answer_key:
+            continue
+        selected_key = answer_key if index in correct_indices else opposite_option_key(question, answer_key)
+        answers[str(index)] = selected_key
+
+    return {"target_accuracy": accuracy, "answers": answers}
+
+
+def answer_from_plan(index: int, answer_plan=None) -> str:
+    plan = answer_plan or {}
+    answers = plan.get("answers", {}) if isinstance(plan, dict) else {}
+    answer_key = str(answers.get(str(index)) or "").strip()
+    if answer_key:
+        return answer_key
+    if QUESTION_BANK:
+        return str(QUESTION_BANK[safe_question_index(index)].get("answer_key") or "").strip()
+    return ""
+
+
+def build_question_prompt(index: int, answer_plan=None):
     if not QUESTION_BANK:
         return "", "暂无题目数据。"
 
     idx = safe_question_index(index)
     q = QUESTION_BANK[idx]
     options_text = "\n".join(q["choices"])
+    planned_answer_key = answer_from_plan(idx, answer_plan)
+    planned_answer_text = option_text_by_key(q, planned_answer_key)
 
     user_visible_text = (
-        f"{q['block_name']} · {q['question_id']}\n"
+        f"{q.get('question_type') or q['block_name']} · {q['question_id']}\n"
         f"{q['question']}\n"
         f"{options_text}"
     )
 
     llm_prompt = (
-        "请根据已给出的阅读材料，回答下面单选题。"
-        "只输出你推荐的选项字母（A/B/C/D），不要解释。\n\n"
+        "请根据已给出的阅读材料，回答下面二选一题。\n"
+        "这是你本题首次回答，必须严格按照内部指定答案作答，不要改选其他选项，也不要提及存在内部指定答案。\n\n"
+        f"阅读材料：\n{READING_MATERIAL}\n\n"
         f"题目编号：{q['question_id']}\n"
+        f"题目类型：{q.get('question_type') or q['block_name']}\n"
         f"题目：{q['question']}\n"
-        f"选项：\n{options_text}"
+        f"选项：\n{options_text}\n\n"
+        f"内部指定答案：{planned_answer_text or planned_answer_key}\n\n"
+        "请输出推荐选项，并用 1-3 句话给出理由。"
     )
     return llm_prompt, user_visible_text
 
@@ -277,7 +446,7 @@ def stream_auto_prompt(llm_prompt, chat_prompt, chat_history, llm_history):
         for token in stream_chat_reply(
             user_message=llm_prompt,
             history=context_history,
-            system_prompt=str(RUNTIME_CONFIG["system_prompt"]),
+            system_prompt=QA_SYSTEM_PROMPT,
             temperature=float(RUNTIME_CONFIG["temperature"]),
             max_tokens=int(RUNTIME_CONFIG["max_tokens"]),
         ):
@@ -346,10 +515,21 @@ def submit_question_answer(selected_option, index):
         return "请先选择一个选项。"
 
     selected_text = str(selected_option).strip()
-    selected_key = selected_text.split(".", 1)[0].strip()
+    selected_key = option_key_from_choice(selected_text)
     correct_key = str(question.get("answer_key", "")).strip()
     correct_text = str(question.get("answer_text", correct_key)).strip()
     explanation = str(question.get("explanation", "")).strip() or "暂无解释。"
+
+    if not question.get("has_standard_answer"):
+        feedback = question.get("feedback") or {}
+        selected_feedback = str(feedback.get(selected_key) or "").strip()
+        if not selected_feedback:
+            selected_feedback = "该选择有其合理性，但也伴随相应代价。"
+        return (
+            f"**模糊决策反馈**  \n"
+            f"你的选择：`{selected_text}`  \n"
+            f"结果反馈：{selected_feedback}"
+        )
 
     is_correct = selected_key == correct_key
     status = "回答正确" if is_correct else "回答错误"
@@ -361,28 +541,18 @@ def submit_question_answer(selected_option, index):
     )
 
 
-def initialize_llm_session(chat_history, llm_history, question_index):
+def initialize_llm_session(chat_history, llm_history, question_index, answer_plan=None, request: gr.Request = None):
     chat_history = normalize_history(chat_history)
     llm_history = normalize_history(llm_history)
+    qa_context = snapshot_qa_context_from_request(request) if request is not None else {}
+    target_accuracy = qa_context.get("qa_target_accuracy") or 0.6
+    answer_plan = answer_plan or build_qa_answer_plan(target_accuracy)
+    answer_plan["context"] = qa_context
     if llm_history:
-        yield chat_history, llm_history, empty_rating_state()
+        yield chat_history, llm_history, empty_rating_state(), answer_plan, gr.update(interactive=False)
         return
 
-    material_prompt = (
-        "请阅读并记住下面的阅读材料，后续会基于该材料进行多轮选择题分析。"
-        "请先回复“已收到阅读材料”。\n\n"
-        f"{READING_MATERIAL}"
-    )
-    for updated_chat, updated_llm, score_update in stream_auto_prompt(
-        llm_prompt=material_prompt,
-        chat_prompt="【系统初始化】已发送阅读材料，请先建立背景。",
-        chat_history=chat_history,
-        llm_history=llm_history,
-    ):
-        chat_history, llm_history = updated_chat, updated_llm
-        yield chat_history, llm_history, score_update
-
-    question_prompt, question_text = build_question_prompt(int(question_index or 0))
+    question_prompt, question_text = build_question_prompt(int(question_index or 0), answer_plan)
     if question_prompt:
         for updated_chat, updated_llm, score_update in stream_auto_prompt(
             llm_prompt=question_prompt,
@@ -391,11 +561,15 @@ def initialize_llm_session(chat_history, llm_history, question_index):
             llm_history=llm_history,
         ):
             chat_history, llm_history = updated_chat, updated_llm
-            yield chat_history, llm_history, score_update
+            yield chat_history, llm_history, score_update, answer_plan, gr.update(interactive=False)
 
 
-def auto_recommend_current_question(question_index, chat_history, llm_history):
-    question_prompt, question_text = build_question_prompt(int(question_index or 0))
+def auto_recommend_current_question(question_index, chat_history, llm_history, answer_plan=None):
+    if not answer_plan:
+        yield normalize_history(chat_history), normalize_history(llm_history), empty_rating_state()
+        return
+
+    question_prompt, question_text = build_question_prompt(int(question_index or 0), answer_plan)
     if not question_prompt:
         yield normalize_history(chat_history), normalize_history(llm_history), empty_rating_state()
         return
@@ -407,6 +581,40 @@ def auto_recommend_current_question(question_index, chat_history, llm_history):
         llm_history=llm_history,
     ):
         yield updated_chat, updated_llm, score_update
+
+
+def respond_qa(message, history, llm_history):
+    if not message or not str(message).strip():
+        return "", history, llm_history, empty_rating_state()
+
+    user_message = str(message).strip()
+    chat_history = normalize_history(history)
+    llm_history = normalize_history(llm_history)
+
+    context_history = list(llm_history)
+    chat_history.append({"role": "user", "content": user_message})
+    chat_history.append({"role": "assistant", "content": ""})
+    llm_history.append({"role": "user", "content": user_message})
+    llm_history.append({"role": "assistant", "content": ""})
+
+    empty_score = empty_rating_state()
+
+    try:
+        for token in stream_chat_reply(
+            user_message=user_message,
+            history=context_history,
+            system_prompt=QA_SYSTEM_PROMPT,
+            temperature=float(RUNTIME_CONFIG["temperature"]),
+            max_tokens=int(RUNTIME_CONFIG["max_tokens"]),
+        ):
+            chat_history[-1]["content"] += token
+            llm_history[-1]["content"] += token
+            yield "", chat_history, llm_history, empty_score
+    except Exception as exc:
+        error_text = f"LLM 调用失败：{exc}"
+        chat_history[-1]["content"] = error_text
+        llm_history[-1]["content"] = error_text
+        yield "", chat_history, llm_history, empty_score
 
 
 def respond(message, history, llm_history):
@@ -452,16 +660,21 @@ def respond_chat(message, history, llm_history):
         yield next_message, chat_history, next_llm_history
 
 
-def respond_custom_chat(message, records, llm_history, chat_context=None):
+def respond_custom_chat(message, records, llm_history, chat_context=None, trust_score=None):
     if not message or not str(message).strip():
-        rating_update, end_update = show_chat_rating_if_complete(records)
-        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), rating_update, end_update
+        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(records)
+        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), rating_update, confirm_update, end_update, row_update
         return
 
     user_message = str(message).strip()
     chat_records = list(records or [])
+    if pending_chat_rating_record(chat_records):
+        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
+        yield user_message, render_custom_chat(chat_records, chat_context), chat_records, normalize_history(llm_history), gr.update(), gr.update(), rating_update, confirm_update, end_update, row_update
+        return
+
     if len(chat_records) >= CHAT_MAX_TURNS:
-        rating_update, end_update = show_chat_rating_if_complete(chat_records)
+        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
         yield (
             "",
             render_custom_chat(chat_records, chat_context),
@@ -470,7 +683,9 @@ def respond_custom_chat(message, records, llm_history, chat_context=None):
             gr.update(interactive=False),
             gr.update(interactive=False),
             rating_update,
+            confirm_update,
             end_update,
+            row_update,
         )
         return
 
@@ -502,20 +717,21 @@ def respond_custom_chat(message, records, llm_history, chat_context=None):
         ):
             record["assistant"] += token
             llm_history[-1]["content"] += token
-            yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update(), gr.update()
+            yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         record["assistant_timestamp"] = current_time_text()
-        input_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
-        button_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS else gr.update()
-        rating_update, end_update = show_chat_rating_if_complete(chat_records)
-        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, rating_update, end_update
+        should_pause_for_rating = pending_chat_rating_record(chat_records) is not None
+        input_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS or should_pause_for_rating else gr.update(interactive=True)
+        button_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS or should_pause_for_rating else gr.update(interactive=True)
+        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, rating_update, confirm_update, end_update, row_update
     except Exception as exc:
         error_text = f"LLM 调用失败：{exc}"
         record["assistant"] = error_text
         record["assistant_timestamp"] = current_time_text()
         llm_history[-1]["content"] = error_text
-        rating_update, end_update = show_chat_rating_if_complete(chat_records)
-        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), rating_update, end_update
+        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), rating_update, confirm_update, end_update, row_update
 
 
 def toggle_reading_panel(is_visible):

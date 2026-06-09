@@ -6,11 +6,10 @@ from app.services.experiment_service import (
     confirm_trust_rating,
     initialize_llm_session,
     question_payload,
-    respond,
+    respond_qa,
     submit_question_answer,
     switch_to_next_question,
     switch_to_prev_question,
-    toggle_reading_panel,
 )
 from app.styles import EXPERIMENT_CSS
 
@@ -22,6 +21,7 @@ def build_qa_demo():
         reading_panel_visible = gr.State(True)
         question_index_state = gr.State(0)
         llm_history_state = gr.State([])
+        qa_answer_plan_state = gr.State({})
         initial_question_title, initial_choices, initial_progress = question_payload(0)
 
         with gr.Column(elem_classes=["top-title"]):
@@ -30,8 +30,8 @@ def build_qa_demo():
         with gr.Row(elem_classes=["main-layout"]):
             with gr.Column(scale=4, elem_classes=["reading-column"]):
                 toggle_reading_btn = gr.Button(
-                    "关闭阅读材料",
-                    variant="secondary",
+                    "开始实验",
+                    variant="primary",
                     elem_classes=["reading-toggle-btn"],
                 )
 
@@ -94,12 +94,12 @@ def build_qa_demo():
                     send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
 
         message.submit(
-            respond,
+            respond_qa,
             inputs=[message, chatbot, llm_history_state],
             outputs=[message, chatbot, llm_history_state, trust_score],
         )
         send_btn.click(
-            respond,
+            respond_qa,
             inputs=[message, chatbot, llm_history_state],
             outputs=[message, chatbot, llm_history_state, trust_score],
         )
@@ -111,9 +111,9 @@ def build_qa_demo():
         )
 
         toggle_reading_btn.click(
-            toggle_reading_panel,
-            inputs=[reading_panel_visible],
-            outputs=[reading_panel_visible, reading_panel, toggle_reading_btn],
+            initialize_llm_session,
+            inputs=[chatbot, llm_history_state, question_index_state, qa_answer_plan_state],
+            outputs=[chatbot, llm_history_state, trust_score, qa_answer_plan_state, toggle_reading_btn],
         )
 
         prev_question_btn.click(
@@ -122,7 +122,7 @@ def build_qa_demo():
             outputs=[question_index_state, question_md, question_options, answer_feedback, question_progress],
         ).then(
             auto_recommend_current_question,
-            inputs=[question_index_state, chatbot, llm_history_state],
+            inputs=[question_index_state, chatbot, llm_history_state, qa_answer_plan_state],
             outputs=[chatbot, llm_history_state, trust_score],
         )
 
@@ -132,7 +132,7 @@ def build_qa_demo():
             outputs=[question_index_state, question_md, question_options, answer_feedback, question_progress],
         ).then(
             auto_recommend_current_question,
-            inputs=[question_index_state, chatbot, llm_history_state],
+            inputs=[question_index_state, chatbot, llm_history_state, qa_answer_plan_state],
             outputs=[chatbot, llm_history_state, trust_score],
         )
 
@@ -140,12 +140,6 @@ def build_qa_demo():
             submit_question_answer,
             inputs=[question_options, question_index_state],
             outputs=[answer_feedback],
-        )
-
-        demo.load(
-            initialize_llm_session,
-            inputs=[chatbot, llm_history_state, question_index_state],
-            outputs=[chatbot, llm_history_state, trust_score],
         )
 
     return demo
