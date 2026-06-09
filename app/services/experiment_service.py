@@ -526,8 +526,6 @@ def submit_question_answer(selected_option, index):
         if not selected_feedback:
             selected_feedback = "该选择有其合理性，但也伴随相应代价。"
         return (
-            f"**模糊决策反馈**  \n"
-            f"你的选择：`{selected_text}`  \n"
             f"结果反馈：{selected_feedback}"
         )
 
@@ -535,9 +533,6 @@ def submit_question_answer(selected_option, index):
     status = "回答正确" if is_correct else "回答错误"
     return (
         f"**{status}**  \n"
-        f"你的选择：`{selected_text}`  \n"
-        f"正确答案：`{correct_text}`  \n"
-        f"解释：{explanation}"
     )
 
 
