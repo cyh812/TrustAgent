@@ -1,14 +1,13 @@
 import gradio as gr
 
 from app.services.experiment_service import (
-    confirm_custom_chat_rating,
+    confirm_custom_chat_rating_or_save,
     initialize_custom_chat_window,
     initialize_custom_chat_session,
     render_custom_chat,
     respond_custom_chat,
 )
 from app.services.key_service import current_time_text
-from app.services.user_data_service import save_chat_record
 from app.styles import EXPERIMENT_CSS
 
 
@@ -48,13 +47,6 @@ def build_chat_demo():
                     scale=2,
                     elem_classes=["trust-end-btn"],
                 )
-                end_experiment_btn = gr.Button(
-                    "结束实验",
-                    variant="stop",
-                    visible=False,
-                    scale=2,
-                    elem_classes=["trust-end-btn"],
-                )
 
             with gr.Group(elem_classes=["composer-wrap"]):
                 chat_message = gr.Textbox(
@@ -83,7 +75,6 @@ def build_chat_demo():
                 chat_send_btn,
                 trust_score,
                 confirm_trust_score_btn,
-                end_experiment_btn,
                 trust_rating_row,
             ],
             concurrency_limit=8,
@@ -100,14 +91,19 @@ def build_chat_demo():
                 chat_send_btn,
                 trust_score,
                 confirm_trust_score_btn,
-                end_experiment_btn,
                 trust_rating_row,
             ],
             concurrency_limit=8,
         )
         confirm_trust_score_btn.click(
-            confirm_custom_chat_rating,
-            inputs=[trust_score, chat_records_state, chat_llm_history_state, chat_context_state],
+            confirm_custom_chat_rating_or_save,
+            inputs=[
+                trust_score,
+                chat_records_state,
+                chat_llm_history_state,
+                chat_started_at_state,
+                chat_context_state,
+            ],
             outputs=[
                 chat_window,
                 chat_records_state,
@@ -116,14 +112,10 @@ def build_chat_demo():
                 chat_send_btn,
                 trust_score,
                 confirm_trust_score_btn,
-                end_experiment_btn,
                 trust_rating_row,
+                save_status,
+                redirect_html,
             ],
-        )
-        end_experiment_btn.click(
-            save_chat_record,
-            inputs=[chat_records_state, chat_started_at_state, trust_score, chat_context_state],
-            outputs=[save_status, chat_message, chat_send_btn, end_experiment_btn, redirect_html],
         )
         demo.load(
             current_time_text,

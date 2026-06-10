@@ -21,7 +21,7 @@ EXPERIMENT_KEY_DB = PROJECT_ROOT / "data" / "data.db"
 RUNTIME_CONFIG: Dict[str, object] = {
     "system_prompt": "请使用简体中文回答，并遵循当前任务说明。",
     "temperature": 0.7,
-    "max_tokens": 1024,
+    "max_tokens": 512,
     "model": "openai/gpt-5.4",
 }
 
@@ -39,7 +39,7 @@ CHAT_SYSTEM_PROMPT_TEMPLATE = """
 
 默认使用简体中文回答。
 
-回答时直接自然地与用户交流，不要解释自己的规则、风格或行为方式，不要机械重复上一轮已经说过的内容。
+回答时优先使用自然对话式短段落交流，不要解释自己的规则、风格或行为方式，不要机械重复上一轮已经说过的内容。
 
 保持整体语气稳定一致。
 """

@@ -2,15 +2,13 @@ import gradio as gr
 
 from app.services.data_service import READING_MATERIAL
 from app.services.experiment_service import (
-    auto_recommend_current_question,
-    confirm_trust_rating,
     initialize_llm_session,
     question_payload,
     respond_qa,
-    submit_question_answer,
-    switch_to_next_question,
-    switch_to_prev_question,
+    submit_qa_rating_and_continue,
+    submit_question_answer_for_rating,
 )
+from app.services.key_service import current_time_text
 from app.styles import EXPERIMENT_CSS
 
 
@@ -22,6 +20,8 @@ def build_qa_demo():
         question_index_state = gr.State(0)
         llm_history_state = gr.State([])
         qa_answer_plan_state = gr.State({})
+        qa_records_state = gr.State([])
+        qa_started_at_state = gr.State("")
         initial_question_title, initial_choices, initial_progress = question_payload(0)
 
         with gr.Column(elem_classes=["top-title"]):
@@ -39,59 +39,73 @@ def build_qa_demo():
                     gr.Markdown("### 阅读材料")
                     gr.Textbox(
                         value=READING_MATERIAL,
+                        label="",
+                        show_label=False,
                         lines=35,
                         interactive=True,
                         placeholder="这里可以放入阅读理解材料……",
+                        elem_classes=["reading-material-box"],
                     )
 
             with gr.Column(scale=8, elem_classes=["chat-panel"]):
                 with gr.Column(elem_classes=["question-panel"]):
-                    question_progress = gr.Markdown(initial_progress)
+                    question_progress = gr.Markdown(initial_progress, visible=False)
                     question_md = gr.Markdown(initial_question_title)
-                    question_options = gr.Radio(
-                        choices=initial_choices,
-                        value=None,
-                        interactive=bool(initial_choices),
-                    )
-                    with gr.Row():
-                        prev_question_btn = gr.Button("上一题", variant="secondary")
-                        next_question_btn = gr.Button("下一题", variant="secondary")
+                    with gr.Row(elem_classes=["qa-answer-row"]):
+                        question_options = gr.Radio(
+                            choices=initial_choices,
+                            value=None,
+                            label="",
+                            show_label=False,
+                            container=False,
+                            interactive=bool(initial_choices),
+                            scale=8,
+                            elem_classes=["qa-option-radio"],
+                        )
                         confirm_answer_btn = gr.Button("确定", variant="primary")
                     answer_feedback = gr.Markdown("")
+
+                with gr.Row(visible=False, elem_classes=["qa-rating-panel"]) as qa_rating_panel:
+                    gr.Markdown(
+                        "请你对LLM Agent表现的信任感水平进行打分",
+                        elem_classes=["qa-rating-title"],
+                    )
+                    trust_score = gr.Radio(
+                        choices=[str(i) for i in range(1, 8)],
+                        value=None,
+                        label="",
+                        show_label=False,
+                        container=False,
+                        interactive=True,
+                        scale=5,
+                        elem_classes=["qa-inline-trust-radio"],
+                    )
+                    trust_confirm_btn = gr.Button(
+                        "评分并进入下一题",
+                        variant="primary",
+                        scale=2,
+                        elem_classes=["trust-confirm-btn"],
+                    )
 
                 chatbot = gr.Chatbot(
                     label="对话",
                     elem_id="qa-chatbot",
                     avatar_images=(None, None),
-                    buttons=["copy"],
                     height=360,
                 )
-
-                with gr.Column(elem_classes=["rating-panel"]):
-                    with gr.Row():
-                        with gr.Column(scale=7):
-                            trust_score = gr.Radio(
-                                choices=[str(i) for i in range(1, 8)],
-                                value=None,
-                                label=None,
-                                show_label=False,
-                                interactive=True,
-                            )
-                        with gr.Column(scale=3, min_width=120):
-                            trust_confirm_btn = gr.Button(
-                                "信任评分",
-                                variant="secondary",
-                                elem_classes=["trust-confirm-btn"],
-                            )
 
                 with gr.Group(elem_classes=["composer-wrap"]):
                     message = gr.Textbox(
                         placeholder="输入问题后按 Enter 发送；Shift + Enter 换行。",
+                        label="",
+                        show_label=False,
                         elem_id="composer",
                         lines=2,
                         container=True,
                     )
                     send_btn = gr.Button("➤", variant="primary", elem_classes=["send-inside-btn"])
+                save_status = gr.Markdown("", visible=False)
+                redirect_html = gr.HTML("", visible=False)
 
         message.submit(
             respond_qa,
@@ -104,42 +118,59 @@ def build_qa_demo():
             outputs=[message, chatbot, llm_history_state, trust_score],
         )
 
-        trust_confirm_btn.click(
-            confirm_trust_rating,
-            inputs=[trust_score],
-            outputs=[],
-        )
-
         toggle_reading_btn.click(
             initialize_llm_session,
             inputs=[chatbot, llm_history_state, question_index_state, qa_answer_plan_state],
             outputs=[chatbot, llm_history_state, trust_score, qa_answer_plan_state, toggle_reading_btn],
         )
 
-        prev_question_btn.click(
-            switch_to_prev_question,
-            inputs=[question_index_state],
-            outputs=[question_index_state, question_md, question_options, answer_feedback, question_progress],
-        ).then(
-            auto_recommend_current_question,
-            inputs=[question_index_state, chatbot, llm_history_state, qa_answer_plan_state],
-            outputs=[chatbot, llm_history_state, trust_score],
-        )
-
-        next_question_btn.click(
-            switch_to_next_question,
-            inputs=[question_index_state],
-            outputs=[question_index_state, question_md, question_options, answer_feedback, question_progress],
-        ).then(
-            auto_recommend_current_question,
-            inputs=[question_index_state, chatbot, llm_history_state, qa_answer_plan_state],
-            outputs=[chatbot, llm_history_state, trust_score],
-        )
-
         confirm_answer_btn.click(
-            submit_question_answer,
-            inputs=[question_options, question_index_state],
-            outputs=[answer_feedback],
+            submit_question_answer_for_rating,
+            inputs=[question_options, question_index_state, qa_records_state, qa_answer_plan_state],
+            outputs=[
+                answer_feedback,
+                qa_records_state,
+                question_options,
+                confirm_answer_btn,
+                trust_confirm_btn,
+                qa_rating_panel,
+            ],
+        )
+
+        trust_confirm_btn.click(
+            submit_qa_rating_and_continue,
+            inputs=[
+                trust_score,
+                question_index_state,
+                qa_records_state,
+                qa_answer_plan_state,
+                chatbot,
+                llm_history_state,
+                qa_started_at_state,
+            ],
+            outputs=[
+                question_index_state,
+                question_md,
+                question_options,
+                answer_feedback,
+                question_progress,
+                chatbot,
+                llm_history_state,
+                qa_records_state,
+                trust_score,
+                trust_confirm_btn,
+                qa_rating_panel,
+                confirm_answer_btn,
+                save_status,
+                message,
+                send_btn,
+                redirect_html,
+            ],
+        )
+
+        demo.load(
+            current_time_text,
+            outputs=[qa_started_at_state],
         )
 
     return demo

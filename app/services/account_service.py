@@ -117,8 +117,6 @@ CHAT_CONFIG_TABLE_COLUMNS = [
     "社会情感表达",
     "认知透明表达",
     "对话立场对齐",
-    "保留字段1",
-    "保留字段2",
     "状态",
     "创建时间",
     "使用时间",
@@ -410,7 +408,7 @@ def list_chat_config_rows() -> List[List[Any]]:
         rows = conn.execute(
             """
             SELECT id, account_id, topic, expression_style_level, transparency_level,
-                   stance_strategy_level, certainty_level, initiative_level, status, created_at, used_at
+                   stance_strategy_level, status, created_at, used_at
             FROM chat_task_configs
             ORDER BY created_at DESC, id DESC
             """
@@ -594,11 +592,9 @@ def insert_chat_task_configs(account_id: str, rows_to_insert: List[Tuple[Any, ..
                 expression_style_level,
                 transparency_level,
                 stance_strategy_level,
-                certainty_level,
-                initiative_level,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             rows_to_insert,
         )
@@ -647,8 +643,6 @@ def assign_chat_task_config(
             feature_values["emotional_valence"],
             feature_values["transparency"],
             feature_values["stance_strategy"],
-            "未配置",
-            "未配置",
             now,
         )
     ]
@@ -683,8 +677,6 @@ def assign_balanced_chat_task_configs(
                 style_values["emotional_valence"],
                 style_values["transparency"],
                 style_values["stance_strategy"],
-                "未配置",
-                "未配置",
                 now,
             )
         )

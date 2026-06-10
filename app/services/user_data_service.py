@@ -175,6 +175,80 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
     )
 
 
+def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at):
+    answer_plan = dict(answer_plan or {})
+    qa_context = dict(answer_plan.get("context") or {})
+    records = list(qa_records or [])
+    chat_history = list(qa_chat_history or [])
+    started_time = str(started_at or "").strip() or current_time_text()
+    ended_time = current_time_text()
+    account_id = get_context_value("account_id", context=qa_context)
+    experiment_key = get_context_value("experiment_key", context=qa_context)
+    subject_name = get_context_value("subject_name", context=qa_context)
+    llm_settings = get_llm_settings()
+
+    payload = {
+        "metadata": {
+            "account_id": account_id,
+            "experiment_key": experiment_key,
+            "subject_name": subject_name,
+            "task_name": "问答",
+            "qa_config_id": get_context_value("qa_config_id", "", context=qa_context),
+            "qa_target_accuracy": get_context_value("qa_target_accuracy", "", context=qa_context),
+            "started_at": started_time,
+            "ended_at": ended_time,
+        },
+        "runtime_config": {
+            "temperature": float(RUNTIME_CONFIG["temperature"]),
+            "max_tokens": int(RUNTIME_CONFIG["max_tokens"]),
+            "model": llm_settings.model,
+            "provider": llm_settings.provider,
+            "base_url": llm_settings.base_url,
+        },
+        "answer_plan": {
+            "target_accuracy": answer_plan.get("target_accuracy"),
+            "answers": answer_plan.get("answers", {}),
+        },
+        "qa_records": records,
+        "qa_chat_history": chat_history,
+    }
+
+    with connect_db() as conn:
+        ensure_record_table(conn)
+        conn.execute(
+            """
+            INSERT INTO experiment_records (
+                account_id,
+                experiment_key,
+                subject_name,
+                task_name,
+                started_at,
+                ended_at,
+                message_count,
+                transcript_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                experiment_key,
+                subject_name,
+                "问答",
+                started_time,
+                ended_time,
+                len(chat_history),
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            ),
+        )
+
+    return (
+        f"问答实验已结束，记录已保存。账号：`{account_id}`。",
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
+    )
+
+
 
 def save_planning_record(planning_records, started_at, planning_state, planning_context=None):
     planning_context = planning_context or EXPERIMENT_CONTEXT

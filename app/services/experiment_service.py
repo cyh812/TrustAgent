@@ -1,5 +1,6 @@
 from html import escape
 import random
+import time
 
 import gradio as gr
 
@@ -253,16 +254,18 @@ def show_chat_rating_if_complete(records):
     pending_record = pending_chat_rating_record(records)
     if pending_record:
         default_score = latest_chat_rating(complete_turns[:-1])
-        end_visible = len(complete_turns) >= CHAT_MAX_TURNS
+        is_final_rating = len(complete_turns) >= CHAT_MAX_TURNS
         return (
             gr.update(visible=True, value=default_score),
-            gr.update(visible=not end_visible),
-            gr.update(visible=end_visible),
+            gr.update(
+                visible=True,
+                value="结束实验" if is_final_rating else "确认打分",
+                variant="stop" if is_final_rating else "primary",
+            ),
             gr.update(visible=True),
         )
     return (
         gr.update(visible=False, value=None),
-        gr.update(visible=False),
         gr.update(visible=False),
         gr.update(visible=False),
     )
@@ -271,7 +274,7 @@ def show_chat_rating_if_complete(records):
 def confirm_custom_chat_rating(score, records, llm_history, chat_context=None):
     chat_records = list(records or [])
     if not apply_pending_chat_rating(chat_records, score):
-        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
         return (
             render_custom_chat(chat_records, chat_context),
             chat_records,
@@ -280,7 +283,6 @@ def confirm_custom_chat_rating(score, records, llm_history, chat_context=None):
             gr.update(),
             rating_update,
             confirm_update,
-            end_update,
             row_update,
         )
 
@@ -295,7 +297,51 @@ def confirm_custom_chat_rating(score, records, llm_history, chat_context=None):
         gr.update(visible=False, value=None),
         gr.update(visible=False),
         gr.update(visible=False),
+    )
+
+
+def confirm_custom_chat_rating_or_save(score, records, llm_history, started_at, chat_context=None):
+    chat_records = list(records or [])
+    is_final_rating = len(complete_chat_turns(chat_records)) >= CHAT_MAX_TURNS
+    result = confirm_custom_chat_rating(score, chat_records, llm_history, chat_context)
+
+    if not is_final_rating:
+        return (*result, gr.update(), gr.update())
+
+    if pending_chat_rating_record(chat_records):
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
+        return (
+            render_custom_chat(chat_records, chat_context),
+            chat_records,
+            normalize_history(llm_history),
+            gr.update(interactive=False),
+            gr.update(interactive=False),
+            rating_update,
+            confirm_update,
+            row_update,
+            "请先选择一个评分。",
+            gr.update(),
+        )
+
+    from app.services.user_data_service import save_chat_record
+
+    save_status, input_update, send_update, _unused_end_update, redirect_update = save_chat_record(
+        chat_records,
+        started_at,
+        score,
+        chat_context,
+    )
+    return (
+        render_custom_chat(chat_records, chat_context),
+        chat_records,
+        normalize_history(llm_history),
+        input_update,
+        send_update,
+        gr.update(visible=False, value=None),
         gr.update(visible=False),
+        gr.update(visible=False),
+        save_status,
+        redirect_update,
     )
 
 
@@ -325,13 +371,12 @@ def safe_question_index(index: int) -> int:
 
 def question_payload(index: int):
     if not QUESTION_BANK:
-        return "### 题目切换\n暂无题目数据。", [], "第 0 / 0 题"
+        return "暂无题目数据。", [], ""
 
     idx = safe_question_index(index)
     q = QUESTION_BANK[idx]
-    question_type = str(q.get("question_type") or q.get("block_name") or "问答题")
-    title = f"### {question_type} · {q['question_id']}\n\n{q['question']}"
-    progress = f"第 {idx + 1} / {len(QUESTION_BANK)} 题"
+    title = str(q["question"])
+    progress = ""
     return title, q["choices"], progress
 
 
@@ -536,6 +581,92 @@ def submit_question_answer(selected_option, index):
     )
 
 
+def build_qa_record(index, selected_option, answer_plan=None):
+    idx = safe_question_index(int(index or 0))
+    question = QUESTION_BANK[idx]
+    selected_text = str(selected_option or "").strip()
+    selected_key = option_key_from_choice(selected_text)
+    correct_key = str(question.get("answer_key") or "").strip()
+    planned_key = answer_from_plan(idx, answer_plan)
+    has_standard_answer = bool(question.get("has_standard_answer"))
+    feedback_text = ""
+    is_correct = None
+
+    if has_standard_answer:
+        is_correct = selected_key == correct_key
+        feedback_text = "回答正确" if is_correct else "回答错误"
+    else:
+        feedback = question.get("feedback") or {}
+        feedback_text = str(feedback.get(selected_key) or "该选择有其合理性，但也伴随相应代价。").strip()
+
+    return {
+        "question_index": idx + 1,
+        "question_id": str(question.get("question_id") or ""),
+        "question_type": str(question.get("question_type") or question.get("block_name") or ""),
+        "question": str(question.get("question") or ""),
+        "choices": list(question.get("choices") or []),
+        "user_answer": selected_key,
+        "user_answer_text": selected_text,
+        "correct_answer": correct_key,
+        "correct_answer_text": option_text_by_key(question, correct_key),
+        "llm_initial_answer": planned_key,
+        "llm_initial_answer_text": option_text_by_key(question, planned_key),
+        "has_standard_answer": has_standard_answer,
+        "is_correct": is_correct,
+        "feedback": feedback_text,
+        "answered_at": current_time_text(),
+        "trust_score": "",
+        "trust_score_timestamp": "",
+    }
+
+
+def submit_question_answer_for_rating(selected_option, index, qa_records, answer_plan=None):
+    if not QUESTION_BANK:
+        return (
+            "暂无题目数据。",
+            list(qa_records or []),
+            gr.update(),
+            gr.update(),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
+    if not selected_option:
+        return (
+            "请先选择一个选项。",
+            list(qa_records or []),
+            gr.update(),
+            gr.update(),
+            gr.update(visible=False),
+            gr.update(visible=False),
+        )
+
+    records = list(qa_records or [])
+    idx = safe_question_index(int(index or 0))
+    record = build_qa_record(idx, selected_option, answer_plan)
+    records = [item for item in records if int(item.get("question_index") or -1) != idx + 1]
+    records.append(record)
+    records.sort(key=lambda item: int(item.get("question_index") or 0))
+
+    if record["has_standard_answer"]:
+        feedback_text = (
+            f"**{record['feedback']}**  \n"
+        )
+    else:
+        feedback_text = (
+            f"结果反馈：{record['feedback']}"
+        )
+
+    is_last = idx >= len(QUESTION_BANK) - 1
+    return (
+        feedback_text,
+        records,
+        gr.update(interactive=False),
+        gr.update(interactive=False),
+        gr.update(visible=True, value="评分并结束实验" if is_last else "评分并进入下一题", variant="stop" if is_last else "primary"),
+        gr.update(visible=True),
+    )
+
+
 def initialize_llm_session(chat_history, llm_history, question_index, answer_plan=None, request: gr.Request = None):
     chat_history = normalize_history(chat_history)
     llm_history = normalize_history(llm_history)
@@ -612,6 +743,118 @@ def respond_qa(message, history, llm_history):
         yield "", chat_history, llm_history, empty_score
 
 
+def submit_qa_rating_and_continue(score, index, qa_records, answer_plan, chat_history, llm_history, started_at):
+    records = list(qa_records or [])
+    idx = safe_question_index(int(index or 0))
+    clean_score = str(score or "").strip()
+    if not clean_score:
+        yield (
+            idx,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            normalize_history(chat_history),
+            normalize_history(llm_history),
+            records,
+            gr.update(interactive=True),
+            gr.update(visible=True),
+            gr.update(visible=True),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+        )
+        return
+
+    for record in reversed(records):
+        if int(record.get("question_index") or -1) == idx + 1:
+            record["trust_score"] = clean_score
+            record["trust_score_timestamp"] = current_time_text()
+            break
+
+    if idx >= len(QUESTION_BANK) - 1:
+        from app.services.user_data_service import save_qa_record
+
+        save_status, message_update, send_update, redirect_update = save_qa_record(
+            records,
+            normalize_history(chat_history),
+            answer_plan,
+            started_at,
+        )
+        if isinstance(redirect_update, dict):
+            redirect_update = gr.update(
+                value=redirect_update.get("value", ""),
+                visible=True,
+            )
+        yield (
+            idx,
+            gr.update(),
+            gr.update(interactive=False),
+            gr.update(value=""),
+            gr.update(),
+            normalize_history(chat_history),
+            normalize_history(llm_history),
+            records,
+            gr.update(value=None),
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(interactive=False),
+            save_status,
+            message_update,
+            send_update,
+            redirect_update,
+        )
+        return
+
+    next_idx = safe_question_index(idx + 1)
+    title, choices, progress = question_payload(next_idx)
+    yield (
+        next_idx,
+        gr.update(value=title),
+        gr.update(choices=choices, value=None, interactive=True),
+        gr.update(value=""),
+        gr.update(value=progress),
+        normalize_history(chat_history),
+        normalize_history(llm_history),
+        records,
+        gr.update(value=None),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(interactive=True),
+        gr.update(),
+        gr.update(interactive=True),
+        gr.update(interactive=True),
+        gr.update(),
+    )
+
+    for updated_chat, updated_llm, score_update in auto_recommend_current_question(
+        next_idx,
+        chat_history,
+        llm_history,
+        answer_plan,
+    ):
+        yield (
+            next_idx,
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            updated_chat,
+            updated_llm,
+            records,
+            score_update,
+            gr.update(visible=False),
+            gr.update(visible=False),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+            gr.update(),
+        )
+
+
 def respond(message, history, llm_history):
     if not message or not str(message).strip():
         return "", history, llm_history, empty_rating_state()
@@ -657,19 +900,19 @@ def respond_chat(message, history, llm_history):
 
 def respond_custom_chat(message, records, llm_history, chat_context=None, trust_score=None):
     if not message or not str(message).strip():
-        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(records)
-        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), rating_update, confirm_update, end_update, row_update
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(records)
+        yield "", render_custom_chat(records, chat_context), records, llm_history, gr.update(), gr.update(), rating_update, confirm_update, row_update
         return
 
     user_message = str(message).strip()
     chat_records = list(records or [])
     if pending_chat_rating_record(chat_records):
-        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
-        yield user_message, render_custom_chat(chat_records, chat_context), chat_records, normalize_history(llm_history), gr.update(), gr.update(), rating_update, confirm_update, end_update, row_update
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
+        yield user_message, render_custom_chat(chat_records, chat_context), chat_records, normalize_history(llm_history), gr.update(), gr.update(), rating_update, confirm_update, row_update
         return
 
     if len(chat_records) >= CHAT_MAX_TURNS:
-        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
         yield (
             "",
             render_custom_chat(chat_records, chat_context),
@@ -679,7 +922,6 @@ def respond_custom_chat(message, records, llm_history, chat_context=None, trust_
             gr.update(interactive=False),
             rating_update,
             confirm_update,
-            end_update,
             row_update,
         )
         return
@@ -703,6 +945,8 @@ def respond_custom_chat(message, records, llm_history, chat_context=None, trust_
     llm_history.append({"role": "assistant", "content": ""})
 
     try:
+        last_render_time = 0.0
+        render_interval = 0.5
         for token in stream_chat_reply(
             user_message=user_message,
             history=context_history,
@@ -712,21 +956,24 @@ def respond_custom_chat(message, records, llm_history, chat_context=None, trust_
         ):
             record["assistant"] += token
             llm_history[-1]["content"] += token
-            yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            now = time.monotonic()
+            if now - last_render_time >= render_interval:
+                last_render_time = now
+                yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
         record["assistant_timestamp"] = current_time_text()
         should_pause_for_rating = pending_chat_rating_record(chat_records) is not None
         input_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS or should_pause_for_rating else gr.update(interactive=True)
         button_update = gr.update(interactive=False) if len(chat_records) >= CHAT_MAX_TURNS or should_pause_for_rating else gr.update(interactive=True)
-        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
-        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, rating_update, confirm_update, end_update, row_update
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, rating_update, confirm_update, row_update
     except Exception as exc:
         error_text = f"LLM 调用失败：{exc}"
         record["assistant"] = error_text
         record["assistant_timestamp"] = current_time_text()
         llm_history[-1]["content"] = error_text
-        rating_update, confirm_update, end_update, row_update = show_chat_rating_if_complete(chat_records)
-        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), rating_update, confirm_update, end_update, row_update
+        rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
+        yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, gr.update(), gr.update(), rating_update, confirm_update, row_update
 
 
 def toggle_reading_panel(is_visible):

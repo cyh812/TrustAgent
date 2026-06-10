@@ -16,6 +16,7 @@ Stage = Literal["need", "plan", "transport", "hotel", "dining", "final", "done"]
 class PlanningGraphState(TypedDict, total=False):
     messages: List[Dict[str, str]]
     current_stage: Stage
+    pending_next_stage: Stage
     stage_results: Dict[str, str]
     last_stage_output: str
     intermediate_outputs: List[str]
@@ -136,6 +137,7 @@ def initial_state() -> Dict[str, Any]:
     return {
         "messages": [],
         "current_stage": "need",
+        "pending_next_stage": "",
         "stage_results": {},
         "last_stage_output": "",
         "intermediate_outputs": [],
@@ -709,10 +711,16 @@ def build_intent_model_prompt(user_input: str, current_stage_title: str) -> str:
 
 请只输出以下四个标签之一，不要输出其他内容：
 
-continue：用户表示认可、满意、可以继续、进入下一阶段。
+continue：用户明确表示当前阶段已经确认，并希望进入下一阶段。
 revise：用户提出修改意见、补充信息、偏好调整、质疑当前方案，要求根据新信息调整当前阶段。
 rerun：用户明确要求重新生成、重试、再跑一次，且没有给出具体修改方向。
 exit：用户明确表示退出、结束、不做了。
+
+额外判定规则：
+1. 只有用户明确表达“当前阶段可以结束/确认，并进入下一阶段”时，才输出 continue。
+2. 如果用户只是说“好的”“可以”“没问题”，但同时提出问题、追问细节、补充条件、表达疑问、要求继续解释或调整偏好，必须输出 revise。
+3. 如果用户仍在和 Agent 讨论当前阶段，不要输出 continue。
+4. 宁可保守输出 revise，也不要过早输出 continue。
 """
 
 
@@ -723,7 +731,28 @@ def classify_pause_intent(user_input: str, current_stage_title: str = "") -> str
         return "exit"
     if any(keyword in text for keyword in ["重来", "重新", "重跑", "再跑一次"]):
         return "rerun"
-    if any(keyword in lowered for keyword in ["ok", "yes"]) or any(keyword in text for keyword in ["可以", "继续", "确认", "下一步", "没问题", "好的"]):
+    explicit_continue_phrases = [
+        "确认进入下一阶段",
+        "进入下一阶段",
+        "继续下一阶段",
+        "可以进入下一阶段",
+        "进入下一步",
+        "继续下一步",
+        "这个阶段可以了",
+        "本阶段可以了",
+        "这一阶段可以了",
+        "当前阶段可以了",
+        "确认这个阶段",
+        "确认本阶段",
+        "确认当前阶段",
+    ]
+    explicit_continue_lower = [
+        "continue to next stage",
+        "next stage",
+        "go next",
+        "proceed",
+    ]
+    if any(phrase in text for phrase in explicit_continue_phrases) or any(phrase in lowered for phrase in explicit_continue_lower):
         return "continue"
 
     try:
@@ -768,6 +797,7 @@ def handle_feedback(state: Dict[str, Any], user_input: str) -> Dict[str, Any]:
         return {
             **state,
             "current_stage": "done",
+            "pending_next_stage": "",
             "done": True,
             "interaction_log": interaction_log,
             "messages": messages,
@@ -782,7 +812,8 @@ def handle_feedback(state: Dict[str, Any], user_input: str) -> Dict[str, Any]:
         )
         return {
             **state,
-            "current_stage": next_stage(stage),
+            "current_stage": stage,
+            "pending_next_stage": next_stage(stage),
             "user_confirmed": True,
             "awaiting_user_info": False,
             "interaction_log": interaction_log,
@@ -799,6 +830,7 @@ def handle_feedback(state: Dict[str, Any], user_input: str) -> Dict[str, Any]:
         return {
             **state,
             "current_stage": stage,
+            "pending_next_stage": "",
             "user_confirmed": False,
             "awaiting_user_info": False,
             "interaction_log": interaction_log,
@@ -814,6 +846,7 @@ def handle_feedback(state: Dict[str, Any], user_input: str) -> Dict[str, Any]:
     return {
         **state,
         "current_stage": stage,
+        "pending_next_stage": "",
         "user_confirmed": False,
         "awaiting_user_info": False,
         "interaction_log": interaction_log,

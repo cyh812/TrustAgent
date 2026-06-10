@@ -397,6 +397,24 @@ def submit_planning_stage_rating(score, records, state, context=None):
         )
         return
 
+    pending_next_stage = str(state.get("pending_next_stage") or "").strip()
+    if pending_next_stage:
+        state["current_stage"] = pending_next_stage
+        state["pending_next_stage"] = ""
+        if pending_next_stage == "done":
+            state["done"] = True
+            yield (
+                "",
+                render_planning_window(records, state, context),
+                records,
+                state,
+                gr.update(interactive=False),
+                gr.update(visible=False, value=None),
+                gr.update(visible=False),
+                gr.update(visible=False),
+            )
+            return
+
     stage_key = str(state.get("current_stage") or "need")
     stage_title = STAGE_TITLES.get(stage_key, "总体需求理解")
     user_message = ""

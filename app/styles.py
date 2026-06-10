@@ -134,6 +134,11 @@ div[data-testid="footer"] {
     margin-top: 0 !important;
 }
 
+.reading-material-box .label-wrap,
+.reading-material-box [data-testid="block-info"] {
+    display: none !important;
+}
+
 .chat-panel {
     border: 1px solid #e2e8f0;
     border-radius: 10px;
@@ -150,11 +155,167 @@ div[data-testid="footer"] {
     margin-bottom: 12px;
 }
 
+.qa-answer-row {
+    align-items: stretch !important;
+    gap: 10px !important;
+}
+
+.qa-option-radio {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    align-self: stretch !important;
+}
+
+.qa-option-radio > div,
+.qa-option-radio .wrap,
+.qa-option-radio .wrap-inner,
+.qa-option-radio .form,
+.qa-option-radio .block,
+.qa-option-radio .input-container,
+.qa-option-radio [data-testid="block-info"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    min-height: 0 !important;
+}
+
+.qa-option-radio .label-wrap,
+.qa-option-radio legend {
+    display: none !important;
+}
+
+.qa-option-radio fieldset {
+    display: flex !important;
+    gap: 10px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    height: 100% !important;
+}
+
+.qa-option-radio label {
+    flex: 1 1 0 !important;
+    min-height: 44px !important;
+    align-items: center !important;
+    border: 1px solid #dbe4ef !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    font-weight: 700 !important;
+}
+
+.qa-answer-row button {
+    height: 100% !important;
+    min-height: 44px !important;
+    border-radius: 8px !important;
+    font-weight: 800 !important;
+}
+
+.qa-rating-panel {
+    width: 100% !important;
+    margin: 6px 0 8px 0 !important;
+    align-items: center !important;
+    gap: 10px !important;
+    border: 1px solid #dbe4ef !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    padding: 8px 10px !important;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+}
+
+.qa-rating-title {
+    flex: 1 1 280px !important;
+    margin: 0 !important;
+    color: #334155 !important;
+    font-size: 14px !important;
+    font-weight: 700 !important;
+    line-height: 1.35 !important;
+}
+
+.qa-rating-title p {
+    margin: 0 !important;
+}
+
+.qa-inline-trust-radio {
+    flex: 1 1 360px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+.qa-inline-trust-radio > div,
+.qa-inline-trust-radio .wrap,
+.qa-inline-trust-radio .wrap-inner,
+.qa-inline-trust-radio .form,
+.qa-inline-trust-radio .block,
+.qa-inline-trust-radio .input-container,
+.qa-inline-trust-radio [data-testid="block-info"] {
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    min-height: 0 !important;
+}
+
+.qa-inline-trust-radio .label-wrap,
+.qa-inline-trust-radio legend {
+    display: none !important;
+}
+
+.qa-inline-trust-radio fieldset {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: transparent !important;
+}
+
+.qa-inline-trust-radio label {
+    flex: 1 1 0 !important;
+    min-width: 34px !important;
+    min-height: 38px !important;
+    justify-content: center !important;
+    border: 1px solid #dbe4ef !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    font-weight: 800 !important;
+    box-shadow: none !important;
+}
+
+.qa-inline-trust-radio label:has(input:checked) {
+    border-color: #f97316 !important;
+    background: #fff7ed !important;
+    color: #9a3412 !important;
+}
+
+.qa-rating-panel .trust-confirm-btn button {
+    width: 100% !important;
+    min-height: 42px !important;
+    border-radius: 8px !important;
+    font-weight: 800 !important;
+    white-space: nowrap !important;
+}
+
 #qa-chatbot,
 #free-chatbot {
     min-height: 360px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
+}
+
+#qa-chatbot {
+    margin-bottom: 0 !important;
 }
 
 #free-chatbot {
@@ -639,7 +800,6 @@ div[data-testid="footer"] {
 }
 
 .trust-end-btn {
-    display: flex !important;
     justify-content: center !important;
     align-items: center !important;
 }
@@ -685,6 +845,10 @@ div[data-testid="footer"] {
     position: relative !important;
     width: 100% !important;
     margin-top: 10px !important;
+}
+
+.chat-panel .composer-wrap {
+    margin-top: 6px !important;
 }
 
 .custom-composer {
@@ -745,9 +909,27 @@ div[data-testid="footer"] {
 
 #composer {
     width: 100% !important;
+    margin: 0 !important;
+    min-height: 64px !important;
+}
+
+#composer .label-wrap,
+#composer [data-testid="block-info"] {
+    display: none !important;
+}
+
+#composer > div,
+#composer .wrap,
+#composer .wrap-inner,
+#composer .form,
+#composer .input-container {
+    margin: 0 !important;
+    padding-top: 0 !important;
+    min-height: 64px !important;
 }
 
 #composer textarea {
+    display: block !important;
     min-height: 48px !important;
     padding-right: 70px !important;
     padding-bottom: 42px !important;

@@ -1,5 +1,7 @@
 import os
 import inspect
+import queue
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
@@ -166,20 +168,67 @@ def stream_chat_reply(
     max_tokens: int,
 ) -> Iterable[str]:
     """Stream a chat response through the configured LangChain chat model."""
-    llm = _build_chat_model(temperature=temperature, max_tokens=max_tokens)
     messages = _convert_history(
         history=history,
         system_prompt=system_prompt,
         user_message=user_message,
     )
+    first_token_timeout = _read_float_env("LLM_FIRST_TOKEN_TIMEOUT", 15.0)
+    retry_count = _read_int_env("LLM_STREAM_RETRY_COUNT", 1)
 
-    for chunk in llm.stream(messages):
-        content = getattr(chunk, "content", "")
-        if isinstance(content, str) and content:
-            yield content
-        elif isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict):
-                    text = part.get("text")
-                    if text:
-                        yield text
+    for attempt in range(retry_count + 1):
+        token_seen = False
+        token_queue: "queue.Queue[object]" = queue.Queue()
+
+        def run_stream() -> None:
+            try:
+                llm = _build_chat_model(temperature=temperature, max_tokens=max_tokens)
+                for chunk in llm.stream(messages):
+                    content = getattr(chunk, "content", "")
+                    if isinstance(content, str) and content:
+                        token_queue.put(content)
+                    elif isinstance(content, list):
+                        for part in content:
+                            if isinstance(part, dict):
+                                text = part.get("text")
+                                if text:
+                                    token_queue.put(text)
+                token_queue.put(None)
+            except Exception as exc:
+                token_queue.put(exc)
+
+        threading.Thread(target=run_stream, daemon=True).start()
+
+        while True:
+            try:
+                item = token_queue.get(timeout=first_token_timeout if not token_seen else None)
+            except queue.Empty:
+                if attempt < retry_count:
+                    break
+                raise TimeoutError(f"LLM first token timeout after {first_token_timeout:.1f}s")
+
+            if item is None:
+                return
+            if isinstance(item, Exception):
+                raise item
+
+            token_seen = True
+            yield str(item)
+
+        # No token was produced before timeout. Retry by starting a fresh request.
+
+
+def _read_float_env(name: str, default: float) -> float:
+    _load_dotenv_if_exists()
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
+def _read_int_env(name: str, default: int) -> int:
+    _load_dotenv_if_exists()
+    try:
+        return max(0, int(os.getenv(name, str(default))))
+    except (TypeError, ValueError):
+        return default
