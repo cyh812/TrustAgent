@@ -172,7 +172,7 @@ def ensure_chat_config_table(conn: sqlite3.Connection) -> None:
             transparency_level TEXT NOT NULL,
             stance_strategy_level TEXT NOT NULL,
             certainty_level TEXT NOT NULL DEFAULT '确定型',
-            initiative_level TEXT NOT NULL,
+            initiative_level TEXT NOT NULL DEFAULT '未配置',
             expression_style_prompt TEXT NOT NULL DEFAULT '',
             transparency_prompt TEXT NOT NULL DEFAULT '',
             stance_strategy_prompt TEXT NOT NULL DEFAULT '',
@@ -592,9 +592,11 @@ def insert_chat_task_configs(account_id: str, rows_to_insert: List[Tuple[Any, ..
                 expression_style_level,
                 transparency_level,
                 stance_strategy_level,
+                certainty_level,
+                initiative_level,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows_to_insert,
         )
@@ -643,6 +645,8 @@ def assign_chat_task_config(
             feature_values["emotional_valence"],
             feature_values["transparency"],
             feature_values["stance_strategy"],
+            "未配置",
+            "未配置",
             now,
         )
     ]
@@ -677,6 +681,8 @@ def assign_balanced_chat_task_configs(
                 style_values["emotional_valence"],
                 style_values["transparency"],
                 style_values["stance_strategy"],
+                "未配置",
+                "未配置",
                 now,
             )
         )
