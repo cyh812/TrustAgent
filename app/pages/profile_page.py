@@ -26,7 +26,7 @@ def build_profile_demo():
 
         with gr.Row():
             gr.Markdown("# 个人信息")
-            back_to_login_btn = gr.Button("\u8fd4\u56de\u767b\u5f55\u9875", variant="secondary", scale=0)
+            back_to_login_btn = gr.Button("退出登录", variant="secondary", scale=0)
 
         profile_status = gr.Markdown("")
         redirect_html = gr.HTML("")
