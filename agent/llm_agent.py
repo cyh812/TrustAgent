@@ -174,6 +174,7 @@ def stream_chat_reply(
         user_message=user_message,
     )
     first_token_timeout = _read_float_env("LLM_FIRST_TOKEN_TIMEOUT", 15.0)
+    stream_idle_timeout = _read_float_env("LLM_STREAM_IDLE_TIMEOUT", 30.0)
     retry_count = _read_int_env("LLM_STREAM_RETRY_COUNT", 1)
 
     for attempt in range(retry_count + 1):
@@ -201,11 +202,13 @@ def stream_chat_reply(
 
         while True:
             try:
-                item = token_queue.get(timeout=first_token_timeout if not token_seen else None)
+                item = token_queue.get(timeout=first_token_timeout if not token_seen else stream_idle_timeout)
             except queue.Empty:
-                if attempt < retry_count:
+                if not token_seen and attempt < retry_count:
                     break
-                raise TimeoutError(f"LLM first token timeout after {first_token_timeout:.1f}s")
+                if not token_seen:
+                    raise TimeoutError(f"LLM first token timeout after {first_token_timeout:.1f}s")
+                raise TimeoutError(f"LLM stream idle timeout after {stream_idle_timeout:.1f}s")
 
             if item is None:
                 return
