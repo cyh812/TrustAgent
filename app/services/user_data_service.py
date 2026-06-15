@@ -97,7 +97,7 @@ def collect_chat_ratings(chat_records):
     ]
 
 
-def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
+def save_chat_record(chat_records, started_at, trust_score, chat_context=None, status="completed"):
     chat_context = chat_context or EXPERIMENT_CONTEXT
     custom_records = normalize_custom_records(chat_records)
     apply_final_chat_rating(custom_records, trust_score)
@@ -112,6 +112,7 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
 
     payload = {
         "metadata": {
+            "status": str(status or "completed"),
             "account_id": account_id,
             "experiment_key": experiment_key,
             "subject_name": subject_name,
@@ -173,9 +174,26 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None):
         gr.update(interactive=False),
         gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
     )
+def interrupt_chat_record(chat_records, started_at, trust_score, chat_context=None):
+    save_status, message_update, send_update, _unused_button_update, redirect_update = save_chat_record(
+        chat_records,
+        started_at,
+        trust_score,
+        chat_context,
+        status="interrupted",
+    )
+    return (
+        save_status,
+        message_update,
+        send_update,
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(interactive=False),
+        redirect_update,
+    )
 
 
-def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at):
+def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at, status="completed"):
     answer_plan = dict(answer_plan or {})
     qa_context = dict(answer_plan.get("context") or {})
     records = list(qa_records or [])
@@ -189,6 +207,7 @@ def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at):
 
     payload = {
         "metadata": {
+            "status": str(status or "completed"),
             "account_id": account_id,
             "experiment_key": experiment_key,
             "subject_name": subject_name,
@@ -208,6 +227,7 @@ def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at):
         "answer_plan": {
             "target_accuracy": answer_plan.get("target_accuracy"),
             "answers": answer_plan.get("answers", {}),
+            "question_order": answer_plan.get("question_order", []),
         },
         "qa_records": records,
         "qa_chat_history": chat_history,
@@ -247,10 +267,33 @@ def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at):
         gr.update(interactive=False),
         gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
     )
+def interrupt_qa_record(qa_records, qa_chat_history, answer_plan, started_at, request: gr.Request):
+    answer_plan = dict(answer_plan or {})
+    if not answer_plan.get("context"):
+        from app.services.account_service import build_qa_context_for_request
+
+        answer_plan["context"] = build_qa_context_for_request(request)
+
+    save_status, message_update, send_update, redirect_update = save_qa_record(
+        qa_records,
+        qa_chat_history,
+        answer_plan,
+        started_at,
+        status="interrupted",
+    )
+    return (
+        save_status,
+        message_update,
+        send_update,
+        gr.update(interactive=False),
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(interactive=False),
+        redirect_update,
+    )
 
 
-
-def save_planning_record(planning_records, started_at, planning_state, planning_context=None):
+def save_planning_record(planning_records, started_at, planning_state, planning_context=None, status="completed"):
     planning_context = planning_context or EXPERIMENT_CONTEXT
     records = list(planning_records or [])
     state = dict(planning_state or {})
@@ -263,6 +306,7 @@ def save_planning_record(planning_records, started_at, planning_state, planning_
 
     payload = {
         "metadata": {
+            "status": str(status or "completed"),
             "account_id": account_id,
             "experiment_key": experiment_key,
             "subject_name": subject_name,
@@ -316,6 +360,23 @@ def save_planning_record(planning_records, started_at, planning_state, planning_
         gr.update(interactive=False),
         gr.update(interactive=False),
         gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={quote(account_id)}'>"),
+    )
+def interrupt_planning_record(planning_records, started_at, planning_state, planning_context=None):
+    save_status, message_update, send_update, _unused_button_update, redirect_update = save_planning_record(
+        planning_records,
+        started_at,
+        planning_state,
+        planning_context,
+        status="interrupted",
+    )
+    return (
+        save_status,
+        message_update,
+        send_update,
+        gr.update(visible=False),
+        gr.update(visible=False),
+        gr.update(interactive=False),
+        redirect_update,
     )
 
 
