@@ -8,6 +8,7 @@ from app.services.experiment_service import (
     respond_custom_chat,
 )
 from app.services.key_service import current_time_text
+from app.services.user_data_service import interrupt_chat_record
 from app.styles import EXPERIMENT_CSS
 
 
@@ -21,8 +22,10 @@ def build_chat_demo():
         chat_context_state = gr.State({})
 
         with gr.Row(elem_classes=["task-header"]):
-            with gr.Column(elem_classes=["top-title"]):
+            with gr.Column(scale=8, elem_classes=["top-title"]):
                 gr.Markdown("# 可信智能体实验 - 聊天")
+            with gr.Column(scale=2, min_width=180, elem_classes=["task-end-action"]):
+                interrupt_btn = gr.Button("中断实验并返回", variant="stop")
 
         with gr.Column(elem_classes=["chat-panel", "free-chat-workspace"]):
             chat_window = gr.HTML(
@@ -114,6 +117,19 @@ def build_chat_demo():
                 confirm_trust_score_btn,
                 trust_rating_row,
                 save_status,
+                redirect_html,
+            ],
+        )
+        interrupt_btn.click(
+            interrupt_chat_record,
+            inputs=[chat_records_state, chat_started_at_state, trust_score, chat_context_state],
+            outputs=[
+                save_status,
+                chat_message,
+                chat_send_btn,
+                confirm_trust_score_btn,
+                trust_rating_row,
+                interrupt_btn,
                 redirect_html,
             ],
         )
