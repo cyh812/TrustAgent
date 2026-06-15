@@ -9,6 +9,7 @@ from app.services.experiment_service import (
     submit_question_answer_for_rating,
 )
 from app.services.key_service import current_time_text
+from app.services.user_data_service import interrupt_qa_record
 from app.styles import EXPERIMENT_CSS
 
 
@@ -24,8 +25,11 @@ def build_qa_demo():
         qa_started_at_state = gr.State("")
         initial_question_title, initial_choices, initial_progress = question_payload(0)
 
-        with gr.Column(elem_classes=["top-title"]):
-            gr.Markdown("# 可信智能体实验 - 问答")
+        with gr.Row(elem_classes=["task-header"]):
+            with gr.Column(scale=8, elem_classes=["top-title"]):
+                gr.Markdown("# 可信智能体实验 - 问答")
+            with gr.Column(scale=2, min_width=180, elem_classes=["task-end-action"]):
+                interrupt_btn = gr.Button("中断实验并返回", variant="stop")
 
         with gr.Row(elem_classes=["main-layout"]):
             with gr.Column(scale=4, elem_classes=["reading-column"]):
@@ -111,17 +115,29 @@ def build_qa_demo():
             respond_qa,
             inputs=[message, chatbot, llm_history_state],
             outputs=[message, chatbot, llm_history_state, trust_score],
+            concurrency_limit=4,
         )
         send_btn.click(
             respond_qa,
             inputs=[message, chatbot, llm_history_state],
             outputs=[message, chatbot, llm_history_state, trust_score],
+            concurrency_limit=4,
         )
 
         toggle_reading_btn.click(
             initialize_llm_session,
             inputs=[chatbot, llm_history_state, question_index_state, qa_answer_plan_state],
-            outputs=[chatbot, llm_history_state, trust_score, qa_answer_plan_state, toggle_reading_btn],
+            outputs=[
+                chatbot,
+                llm_history_state,
+                trust_score,
+                qa_answer_plan_state,
+                toggle_reading_btn,
+                question_md,
+                question_options,
+                question_progress,
+            ],
+            concurrency_limit=4,
         )
 
         confirm_answer_btn.click(
@@ -135,6 +151,7 @@ def build_qa_demo():
                 trust_confirm_btn,
                 qa_rating_panel,
             ],
+            concurrency_limit=4,
         )
 
         trust_confirm_btn.click(
@@ -164,6 +181,21 @@ def build_qa_demo():
                 save_status,
                 message,
                 send_btn,
+                redirect_html,
+            ],
+            concurrency_limit=4,
+        )
+        interrupt_btn.click(
+            interrupt_qa_record,
+            inputs=[qa_records_state, chatbot, qa_answer_plan_state, qa_started_at_state],
+            outputs=[
+                save_status,
+                message,
+                send_btn,
+                confirm_answer_btn,
+                trust_confirm_btn,
+                qa_rating_panel,
+                interrupt_btn,
                 redirect_html,
             ],
         )
