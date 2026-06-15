@@ -7,6 +7,7 @@ from app.services.planning_service import (
     respond_planning,
     submit_planning_stage_rating_or_save,
 )
+from app.services.user_data_service import interrupt_planning_record
 from app.styles import EXPERIMENT_CSS
 
 
@@ -19,8 +20,11 @@ def build_planning_demo():
         planning_started_at_state = gr.State("")
         planning_context_state = gr.State({})
 
-        with gr.Column(elem_classes=["top-title"]):
-            gr.Markdown("# 可信智能体实验 - 规划")
+        with gr.Row(elem_classes=["task-header"]):
+            with gr.Column(scale=8, elem_classes=["top-title"]):
+                gr.Markdown("# 可信智能体实验 - 规划")
+            with gr.Column(scale=2, min_width=180, elem_classes=["task-end-action"]):
+                interrupt_btn = gr.Button("中断实验并返回", variant="stop")
 
         with gr.Column(elem_classes=["chat-panel", "planning-workspace"]):
             planning_window = gr.HTML(
@@ -75,7 +79,7 @@ def build_planning_demo():
                 submit_stage_score_btn,
                 planning_rating_row,
             ],
-            concurrency_limit=8,
+            concurrency_limit=1,
         )
         planning_send_btn.click(
             respond_planning,
@@ -90,7 +94,7 @@ def build_planning_demo():
                 submit_stage_score_btn,
                 planning_rating_row,
             ],
-            concurrency_limit=8,
+            concurrency_limit=1,
         )
         submit_stage_score_btn.click(
             submit_planning_stage_rating_or_save,
@@ -114,7 +118,25 @@ def build_planning_demo():
                 planning_send_btn,
                 redirect_html,
             ],
-            concurrency_limit=8,
+            concurrency_limit=1,
+        )
+        interrupt_btn.click(
+            interrupt_planning_record,
+            inputs=[
+                planning_records_state,
+                planning_started_at_state,
+                planning_state,
+                planning_context_state,
+            ],
+            outputs=[
+                save_status,
+                planning_message,
+                planning_send_btn,
+                submit_stage_score_btn,
+                planning_rating_row,
+                interrupt_btn,
+                redirect_html,
+            ],
         )
         demo.load(
             current_time_text,
