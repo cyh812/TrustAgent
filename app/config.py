@@ -21,7 +21,7 @@ EXPERIMENT_KEY_DB = PROJECT_ROOT / "data" / "data.db"
 RUNTIME_CONFIG: Dict[str, object] = {
     "system_prompt": "请使用简体中文回答，并遵循当前任务说明。",
     "temperature": 0.7,
-    "max_tokens": 512,
+    "max_tokens": 1024,
     "model": "openai/gpt-5.4",
 }
 
