@@ -369,11 +369,47 @@ def safe_question_index(index: int) -> int:
     return max(0, min(index, len(QUESTION_BANK) - 1))
 
 
-def question_payload(index: int):
+def build_question_order():
+    order = list(range(len(QUESTION_BANK)))
+    random.shuffle(order)
+    return order
+
+
+def question_order_from_plan(answer_plan=None):
+    plan = answer_plan or {}
+    order = plan.get("question_order") if isinstance(plan, dict) else None
+    if not isinstance(order, list) or len(order) != len(QUESTION_BANK):
+        return list(range(len(QUESTION_BANK)))
+
+    clean_order = []
+    seen = set()
+    for item in order:
+        try:
+            question_index = int(item)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= question_index < len(QUESTION_BANK) and question_index not in seen:
+            clean_order.append(question_index)
+            seen.add(question_index)
+
+    if len(clean_order) != len(QUESTION_BANK):
+        return list(range(len(QUESTION_BANK)))
+    return clean_order
+
+
+def resolve_question_index(display_index: int, answer_plan=None) -> int:
+    if not QUESTION_BANK:
+        return 0
+    order = question_order_from_plan(answer_plan)
+    safe_display_index = max(0, min(int(display_index or 0), len(order) - 1))
+    return safe_question_index(order[safe_display_index])
+
+
+def question_payload(index: int, answer_plan=None):
     if not QUESTION_BANK:
         return "暂无题目数据。", [], ""
 
-    idx = safe_question_index(index)
+    idx = resolve_question_index(index, answer_plan)
     q = QUESTION_BANK[idx]
     title = str(q["question"])
     progress = ""
@@ -431,7 +467,11 @@ def build_qa_answer_plan(target_accuracy=0.6):
         selected_key = answer_key if index in correct_indices else opposite_option_key(question, answer_key)
         answers[str(index)] = selected_key
 
-    return {"target_accuracy": accuracy, "answers": answers}
+    return {
+        "target_accuracy": accuracy,
+        "answers": answers,
+        "question_order": build_question_order(),
+    }
 
 
 def answer_from_plan(index: int, answer_plan=None) -> str:
@@ -449,7 +489,7 @@ def build_question_prompt(index: int, answer_plan=None):
     if not QUESTION_BANK:
         return "", "暂无题目数据。"
 
-    idx = safe_question_index(index)
+    idx = resolve_question_index(index, answer_plan)
     q = QUESTION_BANK[idx]
     options_text = "\n".join(q["choices"])
     planned_answer_key = answer_from_plan(idx, answer_plan)
@@ -582,7 +622,8 @@ def submit_question_answer(selected_option, index):
 
 
 def build_qa_record(index, selected_option, answer_plan=None):
-    idx = safe_question_index(int(index or 0))
+    display_idx = max(0, int(index or 0))
+    idx = resolve_question_index(display_idx, answer_plan)
     question = QUESTION_BANK[idx]
     selected_text = str(selected_option or "").strip()
     selected_key = option_key_from_choice(selected_text)
@@ -600,6 +641,7 @@ def build_qa_record(index, selected_option, answer_plan=None):
         feedback_text = str(feedback.get(selected_key) or "该选择有其合理性，但也伴随相应代价。").strip()
 
     return {
+        "display_index": display_idx + 1,
         "question_index": idx + 1,
         "question_id": str(question.get("question_id") or ""),
         "question_type": str(question.get("question_type") or question.get("block_name") or ""),
@@ -641,11 +683,11 @@ def submit_question_answer_for_rating(selected_option, index, qa_records, answer
         )
 
     records = list(qa_records or [])
-    idx = safe_question_index(int(index or 0))
-    record = build_qa_record(idx, selected_option, answer_plan)
-    records = [item for item in records if int(item.get("question_index") or -1) != idx + 1]
+    display_idx = max(0, int(index or 0))
+    record = build_qa_record(display_idx, selected_option, answer_plan)
+    records = [item for item in records if int(item.get("display_index") or -1) != display_idx + 1]
     records.append(record)
-    records.sort(key=lambda item: int(item.get("question_index") or 0))
+    records.sort(key=lambda item: int(item.get("display_index") or 0))
 
     if record["has_standard_answer"]:
         feedback_text = (
@@ -656,7 +698,7 @@ def submit_question_answer_for_rating(selected_option, index, qa_records, answer
             f"结果反馈：{record['feedback']}"
         )
 
-    is_last = idx >= len(QUESTION_BANK) - 1
+    is_last = display_idx >= len(question_order_from_plan(answer_plan)) - 1
     return (
         feedback_text,
         records,
@@ -673,9 +715,21 @@ def initialize_llm_session(chat_history, llm_history, question_index, answer_pla
     qa_context = snapshot_qa_context_from_request(request) if request is not None else {}
     target_accuracy = qa_context.get("qa_target_accuracy") or 0.6
     answer_plan = answer_plan or build_qa_answer_plan(target_accuracy)
+    if "question_order" not in answer_plan:
+        answer_plan["question_order"] = build_question_order()
     answer_plan["context"] = qa_context
+    title, choices, progress = question_payload(int(question_index or 0), answer_plan)
     if llm_history:
-        yield chat_history, llm_history, empty_rating_state(), answer_plan, gr.update(interactive=False)
+        yield (
+            chat_history,
+            llm_history,
+            empty_rating_state(),
+            answer_plan,
+            gr.update(interactive=False),
+            gr.update(value=title),
+            gr.update(choices=choices, value=None, interactive=True),
+            gr.update(value=progress),
+        )
         return
 
     question_prompt, question_text = build_question_prompt(int(question_index or 0), answer_plan)
@@ -687,7 +741,16 @@ def initialize_llm_session(chat_history, llm_history, question_index, answer_pla
             llm_history=llm_history,
         ):
             chat_history, llm_history = updated_chat, updated_llm
-            yield chat_history, llm_history, score_update, answer_plan, gr.update(interactive=False)
+            yield (
+                chat_history,
+                llm_history,
+                score_update,
+                answer_plan,
+                gr.update(interactive=False),
+                gr.update(value=title),
+                gr.update(choices=choices, value=None, interactive=True),
+                gr.update(value=progress),
+            )
 
 
 def auto_recommend_current_question(question_index, chat_history, llm_history, answer_plan=None):
@@ -745,7 +808,8 @@ def respond_qa(message, history, llm_history):
 
 def submit_qa_rating_and_continue(score, index, qa_records, answer_plan, chat_history, llm_history, started_at):
     records = list(qa_records or [])
-    idx = safe_question_index(int(index or 0))
+    idx = max(0, int(index or 0))
+    question_order = question_order_from_plan(answer_plan)
     clean_score = str(score or "").strip()
     if not clean_score:
         yield (
@@ -769,12 +833,12 @@ def submit_qa_rating_and_continue(score, index, qa_records, answer_plan, chat_hi
         return
 
     for record in reversed(records):
-        if int(record.get("question_index") or -1) == idx + 1:
+        if int(record.get("display_index") or -1) == idx + 1:
             record["trust_score"] = clean_score
             record["trust_score_timestamp"] = current_time_text()
             break
 
-    if idx >= len(QUESTION_BANK) - 1:
+    if idx >= len(question_order) - 1:
         from app.services.user_data_service import save_qa_record
 
         save_status, message_update, send_update, redirect_update = save_qa_record(
@@ -808,8 +872,8 @@ def submit_qa_rating_and_continue(score, index, qa_records, answer_plan, chat_hi
         )
         return
 
-    next_idx = safe_question_index(idx + 1)
-    title, choices, progress = question_payload(next_idx)
+    next_idx = max(0, min(idx + 1, len(question_order) - 1))
+    title, choices, progress = question_payload(next_idx, answer_plan)
     yield (
         next_idx,
         gr.update(value=title),
@@ -968,7 +1032,11 @@ def respond_custom_chat(message, records, llm_history, chat_context=None, trust_
         rating_update, confirm_update, row_update = show_chat_rating_if_complete(chat_records)
         yield "", render_custom_chat(chat_records, chat_context), chat_records, llm_history, input_update, button_update, rating_update, confirm_update, row_update
     except Exception as exc:
-        error_text = f"LLM 调用失败：{exc}"
+        existing_text = str(record.get("assistant") or "").strip()
+        if existing_text:
+            error_text = f"{existing_text}\n\n[模型响应中断，本轮回答已自动结束]"
+        else:
+            error_text = f"LLM 调用失败：{exc}"
         record["assistant"] = error_text
         record["assistant_timestamp"] = current_time_text()
         llm_history[-1]["content"] = error_text
