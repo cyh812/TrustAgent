@@ -172,7 +172,7 @@ def save_chat_record(chat_records, started_at, trust_score, chat_context=None, s
         gr.update(interactive=False),
         gr.update(interactive=False),
         gr.update(interactive=False),
-        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={quote(account_id)}'>"),
     )
 def interrupt_chat_record(chat_records, started_at, trust_score, chat_context=None):
     save_status, message_update, send_update, _unused_button_update, redirect_update = save_chat_record(
@@ -265,7 +265,7 @@ def save_qa_record(qa_records, qa_chat_history, answer_plan, started_at, status=
         f"问答实验已结束，记录已保存。账号：`{account_id}`。",
         gr.update(interactive=False),
         gr.update(interactive=False),
-        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={account_id}'>"),
+        gr.update(value=f"<meta http-equiv='refresh' content='0;url=/profile?account_id={quote(account_id)}'>"),
     )
 def interrupt_qa_record(qa_records, qa_chat_history, answer_plan, started_at, request: gr.Request):
     answer_plan = dict(answer_plan or {})
@@ -281,6 +281,11 @@ def interrupt_qa_record(qa_records, qa_chat_history, answer_plan, started_at, re
         started_at,
         status="interrupted",
     )
+    if isinstance(redirect_update, dict):
+        redirect_update = gr.update(
+            value=redirect_update.get("value", ""),
+            visible=True,
+        )
     return (
         save_status,
         message_update,
