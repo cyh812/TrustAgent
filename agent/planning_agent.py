@@ -59,6 +59,7 @@ STAGE_GOALS = {
 你只负责“交通建议及预订”。
 目标：
 - 判断从出发地到目的地的合理交通路径。
+- 对大阪/京都这类日本关西目的地，可优先考虑关西国际机场再衔接市内交通；对三亚这类海岛目的地，可优先考虑直飞三亚凤凰国际机场。
 - 调用 query_flight_booking 查询去程和返程航班。
 - 如果航班时间不合理，要主动调整建议。
 - 如果工具失败，可以重试、调整方案，必要时调用 ask_user。
@@ -125,6 +126,86 @@ DESTINATION_DB = {
         "hotel_areas": ["西湖边", "武林广场", "滨江", "钱江新城"],
         "local_transport": ["地铁", "公交", "步行", "共享单车"],
     },
+    "三亚": {
+        "country": "中国",
+        "gateway_city": "三亚",
+        "gateway_airport": "三亚凤凰国际机场",
+        "attractions": ["亚龙湾", "蜈支洲岛", "天涯海角", "南山文化旅游区", "鹿回头", "第一市场"],
+        "foods": ["海南椰子鸡", "清补凉", "文昌鸡", "海鲜火锅", "抱罗粉"],
+        "hotel_areas": ["亚龙湾", "海棠湾", "三亚湾", "大东海"],
+        "local_transport": ["打车", "公交", "景区巴士", "租车自驾"],
+    },
+    "大阪": {
+        "country": "日本",
+        "gateway_city": "大阪",
+        "gateway_airport": "关西国际机场/大阪伊丹机场",
+        "attractions": ["大阪城公园", "道顿堀", "心斋桥", "环球影城日本", "梅田蓝天大厦", "黑门市场"],
+        "foods": ["章鱼烧", "大阪烧", "串炸", "拉面", "寿司"],
+        "hotel_areas": ["难波", "心斋桥", "梅田", "天王寺"],
+        "local_transport": ["地铁", "JR", "私铁", "步行", "出租车"],
+    },
+}
+
+DESTINATION_WEATHER_PROFILES = {
+    "京都": {
+        "weather": ["晴", "多云", "小雨", "阴"],
+        "temperature": (10, 28),
+        "suggestions": ["适合寺社与街区步行", "建议携带折叠伞", "早晚温差较明显", "热门景点建议错峰"],
+    },
+    "北京": {
+        "weather": ["晴", "多云", "阴", "小雨"],
+        "temperature": (8, 32),
+        "suggestions": ["注意防晒和补水", "长城行程建议预留体力", "博物馆建议提前预约", "适合地铁串联景点"],
+    },
+    "杭州": {
+        "weather": ["晴", "多云", "小雨", "阵雨"],
+        "temperature": (12, 30),
+        "suggestions": ["西湖周边适合步行或骑行", "雨天可增加博物馆和茶馆安排", "建议携带雨具", "避开湖滨高峰时段"],
+    },
+    "三亚": {
+        "weather": ["晴", "多云", "阵雨", "雷阵雨"],
+        "temperature": (24, 34),
+        "suggestions": ["注意防晒和补水", "海岛项目需关注风浪", "建议准备泳衣和防水袋", "午后可安排室内或酒店休整"],
+    },
+    "大阪": {
+        "weather": ["晴", "多云", "小雨", "阴"],
+        "temperature": (9, 29),
+        "suggestions": ["适合地铁串联商圈与景点", "环球影城建议提前规划入园时间", "雨天可安排购物和室内展馆", "热门餐厅建议错峰"],
+    },
+}
+
+DESTINATION_FLIGHT_OPTIONS = {
+    "京都": {
+        "airlines": ["日本航空", "全日空", "东方航空", "中国国航"],
+        "arrival_times": ["11:50", "14:20", "18:35", "21:10"],
+        "price_range": (1200, 3600),
+    },
+    "大阪": {
+        "airlines": ["日本航空", "全日空", "东方航空", "中国国航", "春秋航空"],
+        "arrival_times": ["11:40", "14:10", "18:20", "21:05"],
+        "price_range": (1100, 3400),
+    },
+    "三亚": {
+        "airlines": ["海南航空", "南方航空", "东方航空", "中国国航"],
+        "arrival_times": ["10:55", "13:45", "17:20", "22:15"],
+        "price_range": (700, 2600),
+    },
+}
+
+DESTINATION_HOTEL_NAMES = {
+    "京都": ["町家精品旅宿", "京都站前精选酒店", "鸭川河畔旅馆", "四条雅居酒店"],
+    "北京": ["王府井精选酒店", "前门庭院酒店", "国贸商务酒店", "鼓楼文化客栈"],
+    "杭州": ["湖畔假日酒店", "西湖雅居酒店", "钱江新城精选酒店", "武林城市酒店"],
+    "三亚": ["亚龙湾海景度假酒店", "海棠湾亲海酒店", "三亚湾假日酒店", "大东海精品酒店"],
+    "大阪": ["难波城市酒店", "心斋桥精品酒店", "梅田交通枢纽酒店", "天王寺舒适酒店"],
+}
+
+DESTINATION_RESTAURANT_NAMES = {
+    "京都": ["祇园和味料理", "鸭川汤豆腐馆", "岚山茶寮", "京都町家食堂"],
+    "北京": ["前门烤鸭店", "鼓楼涮肉馆", "老北京炸酱面馆", "胡同家常菜"],
+    "杭州": ["湖滨杭帮菜馆", "龙井茶香餐厅", "河坊街小馆", "西溪风味馆"],
+    "三亚": ["第一市场海鲜店", "椰林清补凉铺", "亚龙湾海鲜餐厅", "海南家常菜馆"],
+    "大阪": ["道顿堀章鱼烧铺", "难波大阪烧店", "新世界串炸屋", "黑门市场食堂"],
 }
 
 FLIGHT_FAIL_RATE = 0.25
@@ -206,9 +287,9 @@ def query_weather(destination: str, date: str) -> str:
             "status": "success",
             "destination": destination,
             "date": date,
-            "weather": random.choice(["晴", "多云", "阴", "小雨"]),
-            "temperature": f"{random.randint(12, 30)}℃",
-            "suggestion": random.choice(["适合步行游览", "建议携带雨具", "注意防晒", "适合室内外结合安排"]),
+            "weather": random.choice(DESTINATION_WEATHER_PROFILES.get(destination, {}).get("weather", ["晴", "多云", "阴", "小雨"])),
+            "temperature": f"{random.randint(*DESTINATION_WEATHER_PROFILES.get(destination, {}).get('temperature', (12, 30)))}℃",
+            "suggestion": random.choice(DESTINATION_WEATHER_PROFILES.get(destination, {}).get("suggestions", ["适合步行游览", "建议携带雨具", "注意防晒", "适合室内外结合安排"])),
             "note": "当前系统天气查询结果。",
         },
         ensure_ascii=False,
@@ -243,7 +324,9 @@ def query_flight_booking(
             indent=2,
         )
 
-    price_per_person = random.randint(600, 2200)
+    flight_options = DESTINATION_FLIGHT_OPTIONS.get(destination, {})
+    price_low, price_high = flight_options.get("price_range", (600, 2200))
+    price_per_person = random.randint(price_low, price_high)
     return json.dumps(
         {
             "status": "success",
@@ -253,9 +336,9 @@ def query_flight_booking(
             "date": date,
             "people": people,
             "cabin": cabin,
-            "airline": random.choice(["东方航空", "中国国航", "南方航空", "春秋航空"]),
+            "airline": random.choice(flight_options.get("airlines", ["东方航空", "中国国航", "南方航空", "春秋航空"])),
             "departure_time": random.choice(["08:30", "11:20", "14:45", "19:10"]),
-            "arrival_time": random.choice(["10:50", "13:40", "17:15", "21:30"]),
+            "arrival_time": random.choice(flight_options.get("arrival_times", ["10:50", "13:40", "17:15", "21:30"])),
             "price_per_person": price_per_person,
             "total_price": price_per_person * people,
             "note": "当前系统机票查询结果。",
@@ -312,7 +395,7 @@ def query_hotel_booking(
             "people": people,
             "hotel_level": hotel_level,
             "area_preference": area_preference,
-            "hotel_name": random.choice(["城市精选酒店", "湖畔假日酒店", "中心精品酒店", "旅行者之家"]),
+            "hotel_name": random.choice(DESTINATION_HOTEL_NAMES.get(destination, ["城市精选酒店", "湖畔假日酒店", "中心精品酒店", "旅行者之家"])),
             "area": random.choice(areas),
             "price_per_night": price_per_night,
             "total_price": price_per_night * nights,
@@ -357,7 +440,7 @@ def query_restaurant_booking(
             "destination": destination,
             "date": date,
             "people": people,
-            "restaurant_name": random.choice(["本地风味馆", "老街小馆", "城市食堂", "隐味料理"]),
+            "restaurant_name": random.choice(DESTINATION_RESTAURANT_NAMES.get(destination, ["本地风味馆", "老街小馆", "城市食堂", "隐味料理"])),
             "recommended_food": random.choice(foods),
             "food_preference": food_preference,
             "meal_time": meal_time,
