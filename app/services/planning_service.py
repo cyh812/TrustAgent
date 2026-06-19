@@ -54,7 +54,7 @@ def render_planning_window(records, state=None, context=None):
     ]
 
     if not records:
-        items.append('<div class="custom-chat-empty">请输入你的旅行需求，例如：我想从杭州去京都玩 3 天，2 个人，预算 12000 元。</div>')
+        items.append('<div class="custom-chat-empty">请输入你的旅行需求，例如：我想从杭州去大阪玩 3 天，2 个人，预算 12000 元；或从北京去三亚玩 4 天。</div>')
         items.append("</div>")
         return "".join(items)
 
