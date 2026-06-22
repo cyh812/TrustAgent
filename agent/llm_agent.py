@@ -51,7 +51,7 @@ def get_llm_settings() -> LLMSettings:
     """Read LLM settings from environment variables."""
     _load_dotenv_if_exists()
     provider = (
-        _read_env("LLM_PROVIDER", "TRUSTAGENT_LLM_PROVIDER", "openrouter")
+        _read_env("LLM_PROVIDER", "TRUSTAGENT_LLM_PROVIDER", "deepseek")
         .strip()
         .lower()
     )
@@ -67,7 +67,7 @@ def get_llm_settings() -> LLMSettings:
     if provider == "deepseek":
         return LLMSettings(
             provider=provider,
-            model=_read_env("TRUSTAGENT_LLM_MODEL", default="deepseek-chat"),
+            model=_read_env("DEEPSEEK_MODEL", "TRUSTAGENT_LLM_MODEL", "deepseek-v4-flash"),
             base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
             api_key_env="DEEPSEEK_API_KEY",
         )
@@ -173,9 +173,9 @@ def stream_chat_reply(
         system_prompt=system_prompt,
         user_message=user_message,
     )
-    first_token_timeout = _read_float_env("LLM_FIRST_TOKEN_TIMEOUT", 15.0)
+    first_token_timeout = _read_float_env("LLM_FIRST_TOKEN_TIMEOUT", 20.0)
     stream_idle_timeout = _read_float_env("LLM_STREAM_IDLE_TIMEOUT", 30.0)
-    retry_count = _read_int_env("LLM_STREAM_RETRY_COUNT", 1)
+    retry_count = _read_int_env("LLM_STREAM_RETRY_COUNT", 2)
 
     for attempt in range(retry_count + 1):
         token_seen = False
