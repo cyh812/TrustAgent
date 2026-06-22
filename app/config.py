@@ -22,7 +22,7 @@ RUNTIME_CONFIG: Dict[str, object] = {
     "system_prompt": "请使用简体中文回答，并遵循当前任务说明。",
     "temperature": 0.7,
     "max_tokens": 1024,
-    "model": "openai/gpt-5.4",
+    "model": "deepseek-v4-flash",
 }
 
 CHAT_SYSTEM_PROMPT_TEMPLATE = """
@@ -62,7 +62,7 @@ EXPERIMENT_CONTEXT: Dict[str, str] = {
 }
 
 MODEL_OPTIONS = [
-    "openrouter/auto",
-    "openai/gpt-4o-mini",
-    "deepseek/deepseek-chat",
+    "deepseek-v4-flash",
+    "deepseek-v4-pro",
+    "deepseek-chat",
 ]
