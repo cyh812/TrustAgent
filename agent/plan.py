@@ -6,16 +6,14 @@ from typing import TypedDict, Literal, Optional, List, Dict, Any
 
 from langchain.agents import create_agent
 from langchain_core.tools import tool
-from langchain_openrouter import ChatOpenRouter
 from langgraph.graph import StateGraph, START, END
 
+from agent.llm_agent import _build_chat_model
+
 
 # =========================================================
-# 1. OpenRouter 配置
+# 1. LLM 配置
 # =========================================================
-
-OPENROUTER_API_KEY = ""  # 改成你的 OpenRouter Key
-MODEL_NAME = ""
 
 FLIGHT_FAIL_RATE = 0.25
 HOTEL_FAIL_RATE = 0.25
@@ -475,13 +473,8 @@ STAGE_GOALS = {
 # 5. 模型与 Agent
 # =========================================================
 
-def build_model() -> ChatOpenRouter:
-    if not OPENROUTER_API_KEY or OPENROUTER_API_KEY.startswith("sk-or-v1-xxxx"):
-        raise ValueError("请先在代码顶部填写 OPENROUTER_API_KEY。")
-
-    return ChatOpenRouter(
-        api_key=OPENROUTER_API_KEY,
-        model=MODEL_NAME,
+def build_model():
+    return _build_chat_model(
         temperature=0.7,
         max_tokens=4096,
     )
